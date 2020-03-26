@@ -26,7 +26,9 @@ MATCH p=(a:RemoteHosts)-->(b:TargetUser)-->(c:Event)-->(d:TargetHost) WHERE c.Lo
 
 MATCH p=(a:RemoteHosts)-->(b:TargetUser)-->(c:Event)-->(d:TargetHost) WHERE c.LogonProcessName = 'NtLmSsp ' AND NOT c.TargetUserName IN ['ANONYMOUS LOGON'] RETURN p
 
-##### Runas
+##### Runas (Potential)
+
+MATCH p=(a:RemoteHosts)-->(b:TargetUser)-->(c:Event)-->(d:TargetHost) WHERE c.LogonType = '2' ANd c.LogonProcessName = "seclogo" RETURN p
 
 ##### Mimikatz (PtH)
 
