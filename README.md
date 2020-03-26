@@ -6,10 +6,10 @@ Epimitheus is a python tool that uses graphical database Neo4j for Windows Event
 python3 epimitheus.py -i "bolt://localhost" -u "neo4j" -p "<password>" -x "Windows_Events.xml" -o "output.xml"
 
 #### Import Windows Events/Sysmon to Neo4j
-epimitheus.py -i "bolt://localhost" -u "neo4j" -p "<password>" -x "Windows_Evenst.xml" -o "output.xml" -s
+python3 epimitheus.py -i "bolt://localhost" -u "neo4j" -p "<password>" -x "Windows_Evenst.xml" -o "output.xml" -s
   
 #### Delete data from Neo4j
-epimitheus.py -i "bolt://localhost" -u "neo4j" -p "<password>" -D
+python3 epimitheus.py -i "bolt://localhost" -u "neo4j" -p "<password>" -D
 
 #### Adding Events missing EventIDs
 
