@@ -43,3 +43,7 @@ MATCH p=(a:RemoteHosts)-->(b:TargetUser)-->(c:Event)-->(d:TargetHost) RETURN col
 
 MATCH p=(a:RemoteHosts)-->(b:TargetUser)-->(c:Event)-->(d:TargetHost) WHERE c.EventID = '1116' RETURN c.Path
 
+#### PowerShell
+
+MATCH p=(a:RemoteHosts)-->(b:TargetUser)-->(c:Event)-->(d:TargetHost) WHERE c.HostApplication =~ ".*Power.*" RETURN p LIMIT 10
+
