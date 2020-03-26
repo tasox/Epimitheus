@@ -13,6 +13,8 @@ epimitheus.py -i "bolt://localhost" -u "neo4j" -p "<password>" -D
 
 ### Adding Events IDs
 
+![alt text]()
+
 ### Neo4j Queries
 
 #### RDP Connections (Sysmon and Windows Events)
@@ -32,3 +34,5 @@ MATCH p=(a:RemoteHosts) →(b:TargetUser) →(c:Event) →(d:TargetHost) WHERE c
 #### Memory dump (procdump)
 
 MATCH p=(a:RemoteHosts) →(b:TargetUser) →(c:Event) →(d:TargetHost) RETURN collect(c.TargetFilename)  - Sysmon
+
+#### Windows Defender
