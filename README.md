@@ -16,7 +16,7 @@ epimitheus.py -i "bolt://localhost" -u "neo4j" -p "<password>" -D
 ![alt text](https://github.com/tasox/Epimitheus/blob/master/images/addEventIDs.png)
 
 
-### Neo4j Queries - Example
+### Neo4j Queries - Examples
 
 ##### RDP Connections (Sysmon and Windows Events)
 
