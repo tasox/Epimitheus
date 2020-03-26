@@ -1,5 +1,5 @@
 # Epimitheus
-Epimitheus is a python tool that uses graphical database Neo4j for Windows Events visualization. The job of "epimitheus" is to read the exported Windows Events (including Sysmon) in XML form, create a new XML with the correct Event properties and import it to neo4j.
+Epimitheus is a python tool that uses graphical database Neo4j for Windows Events visualization. The job of "epimitheus" is to read the exported Windows Events (including Sysmon) in XML form, create a new XML with the correct Event properties and import it to neo4j. 
 
 
 #### Import Windows Events to Neo4j
@@ -17,6 +17,7 @@ epimitheus.py -i "bolt://localhost" -u "neo4j" -p "<password>" -D
 
 
 ### Neo4j Queries - Examples
+More Neo4j queries are coming ...
 
 ##### RDP Connections (Sysmon and Windows Events)
 
