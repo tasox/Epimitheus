@@ -48,3 +48,7 @@ MATCH p=(a:RemoteHosts)-->(b:TargetUser)-->(c:Event)-->(d:TargetHost) WHERE c.Ev
 
 MATCH p=(a:RemoteHosts)-->(b:TargetUser)-->(c:Event)-->(d:TargetHost) WHERE c.HostApplication =~ ".*Power.*" RETURN p LIMIT 10
 
+
+#### References
+https://medium.com/@pentesttas/windows-events-sysmon-visualization-using-neo4j-part-1-529ca5ab4593
+https://medium.com/@pentesttas/windows-events-sysmon-visualization-using-neo4j-part-2-d4c2fd3c9413
