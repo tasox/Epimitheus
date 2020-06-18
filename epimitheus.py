@@ -173,7 +173,7 @@ def eventParser(eventIDs):
 	
 	filterEvents = eventIDs
 	localhostIPs=["","-","::1","127.0.0.1","localhost"]
-	blacklistedUsers=["DWM-3","UMFD-3","UMFD-2","DWM-2","-","UMFD-0","UMFD-1","DWM-1"]
+	blacklistedUsers=["DWM-3","UMFD-3","UMFD-2","DWM-2","UMFD-0","UMFD-1","DWM-1"]
 	blacklistedShareFolders=["\\\\*\\SYSVOL","\\\\*\\IPC$"]
 	
 	#How many data will process
@@ -201,9 +201,8 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,sysmonFi
 			for eventValues in value:
 				t.update(eventValues)
 			if t.get("EventID") in evIDs:
-			
+				
 				if sysmonFile: #User provided Sysmon xml file.
-					
 					if t.get("User"):
 						targetUser = t.get("User")
 					elif t.get("UserID"):
@@ -224,7 +223,6 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,sysmonFi
 						remoteHost = t.get("Computer")
 						
 					
-					
 					if t.get("DestinationIp"):
 						targetServer = t.get("DestinationIp") 
 					else:
@@ -244,10 +242,9 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,sysmonFi
 						t.update({'name':t.get("EventID")}) 
 					
 				else:
-				
 					if t.get("TargetUserName"):
 						targetUser = t.get("TargetUserName")
-					elif t.get("SubjectUserName"):
+					if t.get("SubjectUserName"):
 						targetUser = t.get("SubjectUserName")
 					elif t.get("Detection User"):	
 						targetUser = t.get("Detection User")
@@ -311,7 +308,6 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,sysmonFi
 					else:
 						targetUser = "NULL"
 						print("[+] Event ID: "+str(t.get("EventID"))+" with Record ID: "+str(t.get("EventRecordID"))+" does not have targetUser tag!")
-					
 					
 					
 					##########################################################################################
@@ -397,8 +393,8 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,sysmonFi
 						createTag.appendChild(innerTXT)
 						createTagEvent.appendChild(createTag)
 				
-			else:
-				print("[-] Event ID "+str(t.get("EventID"))+" is missing.")
+			#else:
+			#	print("[-] Event ID "+str(t.get("EventID"))+" is missing.")
 				
 			
 		
@@ -440,10 +436,13 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
 		
 		print("[+] Adding the Events ...")
 		with neo4jDriver.session() as session:
-			insertEvents = session.run("UNWIND {events} as eventPros CREATE (e:Event) SET e=eventPros MERGE (r:RemoteHosts {name:e.remoteHost}) MERGE (u:TargetUser {remoteHost: e.remoteHost,EventRecordIDs: [  ],name:e.targetUser}) MERGE (t:TargetHost {name:e.targetServer}) ",events=groupEvents) 
+			insertEvents = session.run("UNWIND {events} as eventPros CREATE (e:Event) SET e=eventPros MERGE (r:RemoteHosts {name:e.remoteHost}) MERGE (u:TargetUser {remoteHost: e.remoteHost,EventRecordIDs: [ ],name:e.targetUser}) MERGE (t:TargetHost {name:e.targetServer})",events=groupEvents)
 		print("[+] Event Correlation ...")
 		with neo4jDriver.session() as session:
-			test = session.run("MATCH (u:TargetUser),(e:Event),(r:RemoteHosts),(t:TargetHost) WHERE u.name=e.targetUser AND r.name=e.remoteHost AND t.name=e.targetServer AND u.remoteHost = r.name SET u.EventRecordIDs=u.EventRecordIDs+e.EventRecordID")
+			test = session.run("MATCH (u:TargetUser),(e:Event),(r:RemoteHosts),(t:TargetHost) WHERE u.name=e.targetUser AND r.name=e.remoteHost AND t.name=e.targetServer AND u.remoteHost = r.name AND NOT e.EventRecordID IN u.EventRecordIDs SET u.EventRecordIDs=u.EventRecordIDs+e.EventRecordID")
+		print("[+] Delete Dublicates ...")
+		with neo4jDriver.session() as session:
+			deleteDublicates = session.run("MATCH (t:TargetUser) WITH t.name as n, t.remoteHost as r, collect(t) as dublicateTargetUser where size(dublicateTargetUser) > 1 UNWIND dublicateTargetUser[1..] AS p DETACH DELETE p")
 		print("[+] Creating the Relationships ...")
 		with neo4jDriver.session() as session:
 			remoteHost2DomUserRelationship=session.run("MATCH (r:RemoteHosts),(u:TargetUser) WHERE u.remoteHost = r.name MERGE (r)-[r1:Source2DomainUser]->(u)")
@@ -542,11 +541,23 @@ if __name__ == '__main__':
 		neo4jDriver.close()
 
 	else:	
-		try: 
+		try:
+			#Open exported XML and remove those chars
+			openXMLread=open(xmlFile,"r")
+			fixChars=re.sub(r"ï»¿", r"", openXMLread.read()) #When Events exported from Windows Event Viewer has tose bad chars inside the XML.
+			openXMLread.close()
+			
+			#Write again the XML without those chars
+			xmlFile=xmlFile.replace(".xml","_epimitheus.xml")
+			openXMLwrite=open(xmlFile,"w")
+			openXMLwrite.write(fixChars)
+			openXMLwrite.close()
+			
 			rootDoc = minidom.parse(xmlFile).documentElement #Open exported XML file. 
 
-		except Exception:
-			print("[-] Can't find the XML file or XML is not in the right format. Use -x/--xml to provide the Windows Event XML file.")
+		except Exception as e:
+			print(e)
+			#print("[-] Can't find the XML file or XML is not in the right format. Use -x/--xml to provide the Windows Event XML file.")
 			sys.exit(1)
 			
 		#Check if the script is running in a Domain
