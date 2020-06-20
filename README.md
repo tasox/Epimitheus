@@ -19,15 +19,15 @@ python3 epimitheus.py -i "bolt://localhost" -u "neo4j" -p "<password>" -D
 ### Neo4j Queries - Examples
 More Neo4j queries are coming ...
 
-##### RDP Connections (Sysmon and Windows Events)
+#### RDP Connections (Sysmon and Windows Events)
 
 MATCH p=(a:RemoteHosts)-->(b:TargetUser)-->(c:Event)-->(d:TargetHost) WHERE c.LogonType = '10' AND c.EventID='4624' RETURN p
 
-##### Pass-The-Hash
+#### Pass-The-Hash
 
 MATCH p=(a:RemoteHosts)-->(b:TargetUser)-->(c:Event)-->(d:TargetHost) WHERE c.LogonProcessName = 'NtLmSsp ' AND NOT c.TargetUserName IN ['ANONYMOUS LOGON'] RETURN p
 
-##### Runas (Potential)
+#### Runas (Potential)
 
 MATCH p=(a:RemoteHosts)-->(b:TargetUser)-->(c:Event)-->(d:TargetHost) WHERE c.LogonType = '2' ANd c.LogonProcessName = "seclogo" RETURN p
 
@@ -39,14 +39,14 @@ MATCH (c:Event),(d:Event) WHERE c.EventID = "4672" AND d.EventID="4688" AND c.Sy
 MATCH (c:Event),(d:Event) WHERE c.EventID="4672" AND d.EventID="4688" AND c.SystemTime=d.SystemTime WITH [(c.EventID),(c.targetUser),(c.remoteHost),(c.SystemTime)] as Event4672,[(d.EventID),(d.targetUser),(d.remoteHost),(d.SystemTime)] as Event4688 RETURN Event4672,Event4688
 
 
-##### Memory dump (procdump)
+#### Memory dump (procdump)
 
 MATCH p=(a:RemoteHosts)-->(b:TargetUser)-->(c:Event)-->(d:TargetHost) WHERE c.EventID="10" AND c.TargetImage =~ ".*lsass.*" RETURN p - Sysmon
 MATCH p=(a:RemoteHosts)-->(b:TargetUser)-->(c:Event)-->(d:TargetHost) RETURN collect(c.TargetFilename)  - Sysmon
 MATCH p=(a:RemoteHosts)-->(b:TargetUser)-->(c:Event)-->(d:TargetHost) WHERE c.EventID="10" AND c.TargetImage="C:\\Windows\\system32\\lsass.exe" RETURN p
 MATCH p=(a:RemoteHosts)-->(b:TargetUser)-->(c:Event)-->(d:TargetHost) WHERE c.EventID="10" AND c.TargetImage="C:\\Windows\\system32\\lsass.exe" RETURN c.EventRecordID,c.targetUser, c.SourceImage,c.TargetImage,c.TargetFilename
 
-##### Windows Defender
+#### Windows Defender
 
 MATCH p=(a:RemoteHosts)-->(b:TargetUser)-->(c:Event)-->(d:TargetHost) WHERE c.EventID = '1116' RETURN c.Path
 
@@ -54,12 +54,12 @@ MATCH p=(a:RemoteHosts)-->(b:TargetUser)-->(c:Event)-->(d:TargetHost) WHERE c.Ev
 
 MATCH p=(a:RemoteHosts)-->(b:TargetUser)-->(c:Event)-->(d:TargetHost) WHERE c.HostApplication =~ ".*Power.*" RETURN p LIMIT 10
 
-##### Defense Evasion - PS Script blogging 
+#### Defense Evasion - PS Script blogging 
 
 MATCH p=(a:RemoteHosts)-->(b:TargetUser)-->(c:Event)-->(d:TargetHost) WHERE c.TargetObject="HKLM\\SOFTWARE\\Wow6432Node\\Policies\\Microsoft\\Windows\\PowerShell\\ScriptBlockLogging\\EnableScriptBlockLogging" RETURN p
 MATCH p=(a:RemoteHosts)-->(b:TargetUser)-->(c:Event)-->(d:TargetHost) WHERE c.TargetObject="HKLM\\SOFTWARE\\Wow6432Node\\Policies\\Microsoft\\Windows\\PowerShell\\ScriptBlockLogging\\EnableScriptBlockLogging" RETURN c.EventID,c.targetUser,c.EventType,c.Details,c.targetServer,c.TargetObject
 
-##### Defense Evasion - PPID Spoofing
+#### Defense Evasion - PPID Spoofing
 
 MATCH (c:Event),(d:Event) WHERE c.EventID = "10" AND d.EventID ="1" AND c.TargetProcessId = d.ProcessId RETURN c.EventRecordID,c.targetUser, c.SourceImage,c.SourceProcessId,c.TargetProcessId,d.Image,d.targetUser
 
