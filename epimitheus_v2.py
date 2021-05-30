@@ -216,7 +216,9 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
             
  
             ####################################REMOTE HOSTS######################################################
-            #Extract remote IPs from Event, if IP source field does not exist then extact from the 'TargetServerName', if 'TargetServerName' does not exist then extract from 'Computer' tag.
+            #Extract remote IPs from Event, 
+            # if IP source field does not exist then extact from the 'TargetServerName', 
+            # if 'TargetServerName' does not exist then extract from 'Computer' tag.
             try:
                 if t.get("IpAddress") and (t.get("IpAddress") in lhostIPs):
                     if t.get("Workstation") and (t.get("Workstation") not in lhostIPs):
@@ -231,10 +233,18 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                 elif t.get("IpAddress") : #and (t.get("IpAddress") not in lhostIPs)
                     remoteHost = t.get("IpAddress")
                     t.update({'remoteHost':regExIP(remoteHost)})
+                    
+
+                #if Sysmon File is provided, then "SourceIp" is the correct tag.
+                elif t.get("SourceIp") and (t.get("SourceIp") not in lhostIPs):
+                    remoteHost = t.get("SourceIp")
+                    t.update({'remoteHost':regExIP(remoteHost)})
+
                 else:
                     remoteHost = t.get("Computer") #t.get("IpAddress")
                     t.update({'remoteHost':regExIP(remoteHost)})
-            
+                                
+
             except TypeError as te:
                 print("[!] Something went wrong to `remoteHost` clause.")
                 print(te)
@@ -281,21 +291,16 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                         targetUser = t.get("TargetUserName")
                     elif t.get("SubjectUserName"):
                         targetUser = t.get("SubjectUserName")
+                    # if Sysmon File is provided, then "User" is the correct tag.
+                    elif t.get("User"):
+                        targetUser = t.get("User")
                     elif t.get("Detection User"):
                         targetUser = t.get("Detection User")
+                    # if Sysmon File is provided, then "UserID" is the correct tag.
+                    elif t.get("UserID"):
+                        targetUser = t.get("UserID")
                     elif t.get("Computer"):
                         targetUser = t.get("Computer")
-                    elif t.get("UserID"):
-                        sid = t.get("UserID")
-                        try:
-                            if (checkdom):
-                                #After converting sid->username check if user is blacklisted.
-                                if sid2name(sid) not in bListedUsers:
-                                    targetUser=sid2name(sid)
-                                else:
-                                    targetUser = sid
-                        except Exception as e:
-                            print(e)
                 except TypeError as te:
                     print(te)
                 
@@ -447,9 +452,15 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
 
             ########################################################################################
             #Add  'Attaking Hosts' into Neo4j
-            targetServer = t.get("Computer")
-            t.update({'targetServer':regEx(targetServer)})
-
+            # if Sysmon File is provided, then "DestinationIp" is the correct tag.
+            if t.get("DestinationIp"):
+                targetServer = t.get("DestinationIp")
+                t.update({'targetServer':targetServer})
+            elif t.get("Computer"):
+                targetServer = t.get("Computer")
+                t.update({'targetServer':regEx(targetServer)})
+            else:
+                print("[-] Something went wrong during the 'DestinationHost' parsing! ")
             #print("[-] Event ID %s with Record ID %s does not have a targetServer." % (t.get("EventID"),t.get("EventRecordID")))
             t.update({'name':t.get("EventID")})
             ##########################################################################################
@@ -488,7 +499,7 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
         print(e)
         sys.exit(1)
 
-    blackListedEventProperties=["Opcode","Keywords","Version","Level","TransmittedServices","KeyLength","LmPackageName","Key Length","Message","LogonGuid","ThreadID","TargetLogonGuid","SubjectDomainName","Guid","Provider","VirtualAccount","TicketEncryptionType","TicketOptions","Keywords","Level","KeyLength","CertIssuerName","CertSerialNumber","CertThumbprint","Channel","ObjectServer","PreAuth Type","ActivityID","TargetOutboundDomainName","FWLink","Unused","Unused2","Unused3","Unused4","Unused5","Unused6","OriginID","OriginName","ErrorCode","TypeID","TypeName","StatusDescription","AdditionalActionsID","SubStatus","ContextInfo","Product"]
+    blackListedEventProperties=["Opcode","Keywords","Version","Level","TransmittedServices","KeyLength","LmPackageName","Key Length","Message","SubjectDomainName","Guid","Provider","VirtualAccount","TicketEncryptionType","TicketOptions","Keywords","Level","KeyLength","CertIssuerName","CertSerialNumber","CertThumbprint","Channel","ObjectServer","PreAuth Type","TargetOutboundDomainName","FWLink","Unused","Unused2","Unused3","Unused4","Unused5","Unused6","OriginID","OriginName","ErrorCode","TypeID","TypeName","StatusDescription","AdditionalActionsID","SubStatus","ContextInfo","Product"]
 
     counter=0
     groupEvents=[] #Example [{ EventId: "4624",targetUser:"tasos"},{EventId: "4625", targetUser: "tzonis"}]
@@ -592,6 +603,7 @@ if __name__ == '__main__':
     parser.add_argument('-D','--delete',help='Delete all data from Neo4j.',action='store_true')
     parser.add_argument('-u','--user',help='neo4j username.',required=True)
     parser.add_argument('-p','--passwd',help='neo4j password.',required=True)
+    parser.add_argument('-s','--sysmon',help='Sysmon file.')
     args = parser.parse_args()
     eventIDs=args.eventID
     neo4jUri=args.uri
