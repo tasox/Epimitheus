@@ -15,8 +15,6 @@ from xml.etree.cElementTree import Element, ElementTree
 from lxml import etree
 from io import StringIO, BytesIO
 
-# pip install python-evtx
-# pip install neo4j
 
 def get_events(input_file, parse_xml=False):
    # https://chapinb.com/python-forensics-handbook/ch03_event_logs.html#iterate-over-record-xml-data-evtx
@@ -33,50 +31,6 @@ def get_events(input_file, parse_xml=False):
     #return p
                 
     
-def isDomain():
-
-    #Url: https://github.com/zakird/pyad/blob/master/pyad/adbase.py
-    #Lines: 11-42 - adbase.py
-    #Fix the code: @taso_x
-    if sys.platform != 'win32':
-        raise Exception("Must be running Windows.")
-
-    else:
-        try:
-            import win32api
-            import pywintypes
-            import win32com.client
-            import win32security
-        except ImportError:
-            raise Exception("pywin32 library required. Download from http://sourceforge.net/projects/pywin32/")
-
-
-        _adsi_provider = win32com.client.Dispatch('ADsNameSpaces')
-
-        try:
-            # Discover default domain and forest information
-            __default_domain_obj = _adsi_provider.GetObject('', "LDAP://rootDSE")
-            # connecting to rootDSE will connect to the domain that the
-            # current logged-in user belongs to.. which is generally the
-            # domain under question and therefore becomes the default domain.
-            _default_detected_forest = __default_domain_obj.Get("rootDomainNamingContext")
-            _default_detected_domain = __default_domain_obj.Get("defaultNamingContext")
-            if(_default_detected_domain):
-                print("[+] Domain Found: "+_default_detected_domain)
-            if(_default_detected_forest):
-                print("[+] Forest Found: "+_default_detected_forest)
-            return True
-
-        except:
-            # If there was an error, this this computer might not be on a domain.
-            __default_domain_obj = "None"
-            _default_detected_forest = "None"
-            _default_detected_domain = "None"
-            print("[-] Couldn't connect with LDAP Server!")
-            print("\r\n")
-            return False
-
-
 def sid2name(sid):
     dom = win32com.client.GetObject("LDAP://rootDSE").Get("defaultNamingContext")
     conn = win32com.client.Dispatch('ADODB.Connection')
