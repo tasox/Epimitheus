@@ -112,6 +112,7 @@ def eventParser(eventIDs,xmlDoc):
                         else:
                             tag=y.nodeName
                             attrs=y.attributes.items()
+                            value=y.firstChild.nodeValue
                             
                         # Clean EventID tag from not useful attributes e.g <EventID Qualifer="0">.
                         # This happened when I used PowerShell events from CCPT.
@@ -122,10 +123,10 @@ def eventParser(eventIDs,xmlDoc):
                             #trim the attributes of EventID tag
                             attrs=[]
                         else:
-                            attrs=y.attributes.items()                        
+                            attrs=y.attributes.items()
+                        #print(attrs) #[OK]                         
                         ###############################################################################
                         
-                        value=y.firstChild.nodeValue    
                         dict={'Tags':tag,'Attrs':attrs,'Value':value}
                         if not dict['Attrs']:
                             #print ("[+]%s:%s" %(dict['Tags'],dict['Value'])) #[OK]
