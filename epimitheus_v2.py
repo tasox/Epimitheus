@@ -214,7 +214,7 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                 else:   
                     t.update(eventValue)
             
- 
+
             ####################################REMOTE HOSTS######################################################
             #Extract remote IPs from Event, 
             # if IP source field does not exist then extact from the 'TargetServerName', 
@@ -239,11 +239,17 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                 elif t.get("SourceIp") and (t.get("SourceIp") not in lhostIPs):
                     remoteHost = t.get("SourceIp")
                     t.update({'remoteHost':regExIP(remoteHost)})
+                   
 
                 else:
                     remoteHost = t.get("Computer") #t.get("IpAddress")
                     t.update({'remoteHost':regExIP(remoteHost)})
                                 
+                if t.get("SourceHostname"):
+                    remoteSourceHostname = t.get("SourceHostname")
+                    t.update({'remoteHostname':remoteSourceHostname})
+                else:
+                    t.update({'remoteHostname':regExIP(remoteHost)})
 
             except TypeError as te:
                 print("[!] Something went wrong to `remoteHost` clause.")
@@ -523,7 +529,7 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
         
         print("[+] Adding the Events ...")
         with neo4jDriver.session() as session:
-            insertEvents = session.run("UNWIND $events as eventPros CREATE (e:Event) SET e=eventPros MERGE (r:RemoteHosts {name:e.remoteHost}) MERGE (u:TargetUser {remoteHost: e.remoteHost,EventRecordIDs: [ ], name:e.targetUser}) MERGE (t:TargetHost {name:e.targetServer})",events=groupEvents)
+            insertEvents = session.run("UNWIND $events as eventPros CREATE (e:Event) SET e=eventPros MERGE (r:RemoteHosts {name:e.remoteHost,remoteHostname:e.remoteHostname}) MERGE (u:TargetUser {remoteHost: e.remoteHost,EventRecordIDs: [ ], name:e.targetUser}) MERGE (t:TargetHost {name:e.targetServer})",events=groupEvents)
         print("[+] Event Correlation ...")
         with neo4jDriver.session() as session:
             test = session.run("MATCH (u:TargetUser),(e:Event),(r:RemoteHosts),(t:TargetHost) WHERE u.name=e.targetUser AND r.name=e.remoteHost AND t.name=e.targetServer AND u.remoteHost = r.name AND NOT e.EventRecordID IN u.EventRecordIDs SET u.EventRecordIDs=u.EventRecordIDs+e.EventRecordID")
