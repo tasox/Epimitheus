@@ -171,8 +171,6 @@ def eventParser(eventIDs,xmlDoc):
     blacklistedUsers=["DWM-3","UMFD-3","UMFD-2","DWM-2","UMFD-0","UMFD-1","DWM-1"]
     blacklistedShareFolders=["\\\\*\\SYSVOL","\\\\*\\IPC$"]
 
-    #How many data will process
-    #dataProcess = str(len(input_list2.keys()))
     return (filterEvents, localhostIPs, blacklistedUsers, blacklistedShareFolders, input_list2)
 
 def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFile):
@@ -435,16 +433,6 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                             print(error)
                        
 
-                   ############ UPDATE #################################
-                    #t.update({'targetUser':targetUser})    
-                    #t.update({'HostApplication':HostApplication})
-                    #t.update({'ScriptName':ScriptName})
-                    #t.update({'CommandLine':CommandLine})
-                    #t.update({'CommandPath':CommandPath})
-                    #t.update({'SequenceNumber':SequenceNumber})
-                    #t.update({'Severity':Severity})
-                    ######################################################
-                        
                     # print(t.get('EventRecordID')+"-->"+t.get('targetUser')) [OK]
                 
                 except Exception as error:
@@ -599,13 +587,11 @@ def eventCounters(neo4jUri,neo4jUser,neo4jPass):
 
     #Close the connection with Neo4j
     neo4jDriver.close()
-    #print(neo4jDriver.closed())
 
 
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Filter the Windows Events file.')
-    #parser.add_argument('-e','--eventID', nargs='+', default=["400","403","600","800","1102","1006","1015","1040","1042","1116","4103","4104","4105","4624","4625","4634","4648","4662","4672","4673","4688","4697","4698","4702","4713","4723","4724","4735","4737","4739","4742","4755","4765","4766","4768","4769","4776","4780","4794","4798","4964","5136","5140","5145","5156","5805","7045","8004","8007","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","255"],help='Use comma to seperate eventIDs.')
     parser.add_argument('-e','--eventID',help="EventID filtering",nargs='?',type=str, default=[])
     parser.add_argument('-ev', '--events',help='Windows Events in XML OR EVTX format.')
     parser.add_argument('-i','--uri',help='neo4j host. Example: bolt://localhost',required=True)
