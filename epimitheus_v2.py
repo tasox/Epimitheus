@@ -114,13 +114,6 @@ def eventParser(eventIDs,xmlDoc):
                         #print(attrs) #[OK]                         
                         ###############################################################################
                         
-                        '''if tag == "EventID":
-                            # If User provided '-e' flag which is the EventID filtering.
-                            # eventIDs holds all the event ids that user wants to filter.
-                            if eventIDs and (value not in eventIDs):
-                                t= {}
-                            else:'''
-                        
                         dict={'Tags':tag,'Attrs':attrs,'Value':value}
                         if not dict['Attrs']:
                             #print ("[+]%s:%s" %(dict['Tags'],dict['Value'])) #[OK]
@@ -519,10 +512,11 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
         
         print("[+] Adding the Events ...")
         with neo4jDriver.session() as session:
-            insertEvents = session.run("UNWIND $events as eventPros CREATE (e:Event) SET e=eventPros MERGE (r:RemoteHosts {name:e.remoteHost,remoteHostname:e.remoteHostname}) MERGE (u:TargetUser {remoteHost: e.remoteHost,EventRecordIDs: [ ], name:e.targetUser}) MERGE (t:TargetHost {name:e.targetServer})",events=groupEvents)
+            insertEvents = session.run("UNWIND $events as eventPros CREATE (e:Event) SET e=eventPros MERGE (r:RemoteHosts {name:e.remoteHost,remoteHostname:e.remoteHostname}) MERGE (u:TargetUser {remoteHost: e.remoteHost,EventRecordIDs: [ ],name:e.targetUser}) MERGE (t:TargetHost {name:e.targetServer})",events=groupEvents)
         print("[+] Event Correlation ...")
         with neo4jDriver.session() as session:
-            test = session.run("MATCH (u:TargetUser),(e:Event),(r:RemoteHosts),(t:TargetHost) WHERE u.name=e.targetUser AND r.name=e.remoteHost AND t.name=e.targetServer AND u.remoteHost = r.name AND NOT e.EventRecordID IN u.EventRecordIDs SET u.EventRecordIDs=u.EventRecordIDs+e.EventRecordID")
+            #Update node properties 
+            test = session.run("MATCH (u:TargetUser),(e:Event),(r:RemoteHosts),(t:TargetHost) WHERE u.name=e.targetUser AND r.name=e.remoteHost AND t.name=e.targetServer AND u.remoteHost = r.name AND NOT e.EventRecordID IN u.EventRecordIDs SET u.EventRecordIDs=u.EventRecordIDs+e.EventRecordID SET u.subjectUsername = e.SubjectUserName")
         print("[+] Delete Dublicates ...")
         with neo4jDriver.session() as session:
             deleteDublicates = session.run("MATCH (t:TargetUser) WITH t.name as n, t.remoteHost as r, collect(t) as dublicateTargetUser where size(dublicateTargetUser) > 1 UNWIND dublicateTargetUser[1..] AS p DETACH DELETE p")
