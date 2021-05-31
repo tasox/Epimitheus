@@ -30,18 +30,6 @@ def get_events(input_file, parse_xml=False):
                 yield evtxXML                 
     #return p
                 
-    
-def sid2name(sid):
-    dom = win32com.client.GetObject("LDAP://rootDSE").Get("defaultNamingContext")
-    conn = win32com.client.Dispatch('ADODB.Connection')
-    conn.Open("Provider=ADSDSOObject")
-    query = "<LDAP://"+dom+">;(&(objectClass=*)(objectSid="+sid+"));sAMAccountName"
-    record_set = conn.Execute(query)[0]
-    targetUser=record_set.Fields("sAMAccountName").value
-    return(targetUser)
-
-
-
 def regEx(string):
 
     dotCounter=0
@@ -101,19 +89,18 @@ def eventParser(eventIDs,xmlDoc):
             counter=counter+1
             
             for x in p.childNodes:
-                #print(x)
                 for y in x.childNodes:
+            
                     try:
                         if not y.firstChild:
                             tag=y.nodeName
                             attrs=y.attributes.items()
                             value=y.firstChild
-
                         else:
                             tag=y.nodeName
                             attrs=y.attributes.items()
                             value=y.firstChild.nodeValue
-                            
+
                         # Clean EventID tag from not useful attributes e.g <EventID Qualifer="0">.
                         # This happened when I used PowerShell events from CCPT.
                         # We need only the <EventID>
@@ -126,6 +113,13 @@ def eventParser(eventIDs,xmlDoc):
                             attrs=y.attributes.items()
                         #print(attrs) #[OK]                         
                         ###############################################################################
+                        
+                        '''if tag == "EventID":
+                            # If User provided '-e' flag which is the EventID filtering.
+                            # eventIDs holds all the event ids that user wants to filter.
+                            if eventIDs and (value not in eventIDs):
+                                t= {}
+                            else:'''
                         
                         dict={'Tags':tag,'Attrs':attrs,'Value':value}
                         if not dict['Attrs']:
@@ -142,9 +136,8 @@ def eventParser(eventIDs,xmlDoc):
                                 key = value
                                 value = dict['Value']
                         #print ("[+]%s:%s" % (key,value))
-                        
-                        #if key not in ['Message']:
-                        dict2={key:value}
+                                                
+                        dict2={key:value}     
                         dict3={counter:dict2}
                         t.append(dict3)
                     except:
@@ -152,9 +145,10 @@ def eventParser(eventIDs,xmlDoc):
     except Exception as e:
         print(e)
 
-    #print(t)
+    # List before EventID filtering
     input_list = {}
 
+   
     #Group events
     for x in range(len(t)):
         for k,v in t[x].items():
@@ -163,15 +157,23 @@ def eventParser(eventIDs,xmlDoc):
             else:
                 input_list[k].append(v)
 
-
+    # Event filtering procedure.
+    input_list2 = {}
+    for key,value in input_list.items():
+        for val in value:
+            if eventIDs and val.get("EventID") in eventIDs.split(","):
+                input_list2[key]=value
+            elif not eventIDs:
+                input_list2 =  input_list  
+     
     filterEvents = eventIDs
     localhostIPs=["","-","::1","127.0.0.1","localhost"]
     blacklistedUsers=["DWM-3","UMFD-3","UMFD-2","DWM-2","UMFD-0","UMFD-1","DWM-1"]
     blacklistedShareFolders=["\\\\*\\SYSVOL","\\\\*\\IPC$"]
 
     #How many data will process
-    dataProcess = str(len(input_list.keys()))
-    return (filterEvents, localhostIPs, blacklistedUsers, blacklistedShareFolders, input_list)
+    #dataProcess = str(len(input_list2.keys()))
+    return (filterEvents, localhostIPs, blacklistedUsers, blacklistedShareFolders, input_list2)
 
 def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFile):
 
@@ -603,13 +605,13 @@ def eventCounters(neo4jUri,neo4jUser,neo4jPass):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Filter the Windows Events file.')
-    parser.add_argument('-e','--eventID', nargs='+', default=["400","403","600","800","1102","1006","1015","1040","1042","1116","4103","4104","4105","4624","4625","4634","4648","4662","4672","4673","4688","4697","4698","4702","4713","4723","4724","4735","4737","4739","4742","4755","4765","4766","4768","4769","4776","4780","4794","4798","4964","5136","5140","5145","5156","5805","7045","8004","8007","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","255"],help='Use comma to seperate eventIDs.')
+    #parser.add_argument('-e','--eventID', nargs='+', default=["400","403","600","800","1102","1006","1015","1040","1042","1116","4103","4104","4105","4624","4625","4634","4648","4662","4672","4673","4688","4697","4698","4702","4713","4723","4724","4735","4737","4739","4742","4755","4765","4766","4768","4769","4776","4780","4794","4798","4964","5136","5140","5145","5156","5805","7045","8004","8007","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","255"],help='Use comma to seperate eventIDs.')
+    parser.add_argument('-e','--eventID',help="EventID filtering",nargs='?',type=str, default=[])
     parser.add_argument('-ev', '--events',help='Windows Events in XML OR EVTX format.')
     parser.add_argument('-i','--uri',help='neo4j host. Example: bolt://localhost',required=True)
     parser.add_argument('-D','--delete',help='Delete all data from Neo4j.',action='store_true')
     parser.add_argument('-u','--user',help='neo4j username.',required=True)
     parser.add_argument('-p','--passwd',help='neo4j password.',required=True)
-    parser.add_argument('-s','--sysmon',help='Sysmon file.')
     args = parser.parse_args()
     eventIDs=args.eventID
     neo4jUri=args.uri
