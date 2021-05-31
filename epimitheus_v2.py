@@ -517,6 +517,7 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
         with neo4jDriver.session() as session:
             #Update node properties 
             test = session.run("MATCH (u:TargetUser),(e:Event),(r:RemoteHosts),(t:TargetHost) WHERE u.name=e.targetUser AND r.name=e.remoteHost AND t.name=e.targetServer AND u.remoteHost = r.name AND NOT e.EventRecordID IN u.EventRecordIDs SET u.EventRecordIDs=u.EventRecordIDs+e.EventRecordID SET u.subjectUsername = e.SubjectUserName")
+            #createSubjectUsernameNode = session.run("MATCH (u:TargetUser) WHERE u.subjectUsername IS NOT NULL WITH u.subjectUsername as subjectUsername CREATE (b:TargetUser {name:subjectUsername})")
         print("[+] Delete Dublicates ...")
         with neo4jDriver.session() as session:
             deleteDublicates = session.run("MATCH (t:TargetUser) WITH t.name as n, t.remoteHost as r, collect(t) as dublicateTargetUser where size(dublicateTargetUser) > 1 UNWIND dublicateTargetUser[1..] AS p DETACH DELETE p")
