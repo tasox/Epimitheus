@@ -516,18 +516,21 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
         print("[+] Event Correlation ...")
         with neo4jDriver.session() as session:
             #Update node properties 
-            test = session.run("MATCH (u:TargetUser),(e:Event),(r:RemoteHosts),(t:TargetHost) WHERE u.name=e.targetUser AND r.name=e.remoteHost AND t.name=e.targetServer AND u.remoteHost = r.name AND NOT e.EventRecordID IN u.EventRecordIDs SET u.EventRecordIDs=u.EventRecordIDs+e.EventRecordID SET u.subjectUsername = e.SubjectUserName")
-            #createSubjectUsernameNode = session.run("MATCH (u:TargetUser) WHERE u.subjectUsername IS NOT NULL WITH u.subjectUsername as subjectUsername CREATE (b:TargetUser {name:subjectUsername})")
+            test = session.run("MATCH (u:TargetUser),(e:Event),(r:RemoteHosts),(t:TargetHost) WHERE u.name=e.targetUser AND r.name=e.remoteHost AND t.name=e.targetServer AND u.remoteHost = r.name AND NOT e.EventRecordID IN u.EventRecordIDs SET u.EventRecordIDs=u.EventRecordIDs+e.EventRecordID SET u.subjectUsername = e.SubjectUserName SET u.targetServer = e.targetServer")
+            createSubjectUsernameNode = session.run("MATCH (u:TargetUser) WHERE u.subjectUsername IS NOT NULL WITH u.EventRecordIDs as eventRecordIDs, u.subjectUsername as subjectUsername, u.remoteHost as remoteHost, u.targetServer as targetServer CREATE (b:TargetUser {name:subjectUsername}) SET b.EventRecordIDs = eventRecordIDs SET b.remoteHost = remoteHost SET b.IsSubjectUser = 'true' SET b.targetServer = targetServer")
         print("[+] Delete Dublicates ...")
         with neo4jDriver.session() as session:
             deleteDublicates = session.run("MATCH (t:TargetUser) WITH t.name as n, t.remoteHost as r, collect(t) as dublicateTargetUser where size(dublicateTargetUser) > 1 UNWIND dublicateTargetUser[1..] AS p DETACH DELETE p")
         print("[+] Creating the Relationships ...")
         with neo4jDriver.session() as session:
-            remoteHost2DomUserRelationship=session.run("MATCH (r:RemoteHosts),(u:TargetUser) WHERE u.remoteHost = r.name MERGE (r)-[r1:Source2TargerUser]->(u)")
+            # Check if Event node has the 'SubjectUserName'. If yes, then the relationship is:
+            # RemoteHost -> User -> TargetUser -> EventID -> targetServer
+            allInOnerelationship = session.run("MATCH (u:TargetUser),(u2:TargetUser),(e:Event),(r:RemoteHosts),(t:TargetHost) WHERE u.name = u2.subjectUsername AND e.EventRecordID IN u.EventRecordIDs AND e.EventRecordID IN u2.EventRecordIDs AND u.name = e.SubjectUserName AND u.remoteHost = r.name AND u.IsSubjectUser = 'true' AND t.name = u2.targetServer MERGE (r)-[r1:RemoteHostTOSubjectUsername]-(u)-[r2:SubjectUsernameTOTargetuser]-(u2)-[r3:TargetUserTOEventID]-(e)-[r4:EventIDTOtargetHost]->(t) WITH collect(r1)[1..] as rels, collect(r2)[1..] as rels2 FOREACH (r1 in rels | DELETE r1) FOREACH (r2 in rels2 | DELETE r2)") 
+            remoteHost2DomUserRelationship=session.run("MATCH (r:RemoteHosts),(u:TargetUser) WHERE u.remoteHost = r.name AND u.IsSubjectUser IS NULL AND u.subjectUsername IS NULL MERGE (r)-[r5:Source2TargerUser]->(u)")
         with neo4jDriver.session() as session:
-            targetUser2EventRelationship = session.run("MATCH (u:TargetUser),(e:Event) WHERE e.targetUser = u.name AND e.EventRecordID IN u.EventRecordIDs MERGE (u)-[r2:TargetUser2Event]->(e)")
+            targetUser2EventRelationship = session.run("MATCH (u:TargetUser),(e:Event) WHERE e.targetUser = u.name AND e.EventRecordID IN u.EventRecordIDs AND u.IsSubjectUser IS NULL AND u.subjectUsername IS NULL MERGE (u)-[r6:TargetUser2Event]->(e)")
         with neo4jDriver.session() as session:
-            event2TargetHostRelationship= session.run("MATCH (t:TargetHost),(e:Event) WHERE t.name = e.targetServer MERGE (e)-[r3:Event2Destination]->(t)")
+            event2TargetHostRelationship= session.run("MATCH (t:TargetHost),(e:Event) WHERE t.name = e.targetServer AND e.SubjectUserName IS NULL MERGE (e)-[r7:Event2Destination]->(t)")
 
     except Exception as e:
         print(e)
