@@ -396,7 +396,7 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                                 #print(CommandPath)
                                 
                         except Exception as error:
-                            print(Error)
+                            print(error)
                         
                         try:                        
                             if(re.findall('SequenceNumber=.*\w+.*',eventX)):
@@ -517,9 +517,7 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "UNWIND $events as eventPros "
                 "CREATE (e:Event) SET e=eventPros "
                 "MERGE (r:RemoteHosts {name:e.remoteHost,remoteHostname:e.remoteHostname}) "
-                "MERGE (t:TargetHost {name:e.targetServer}) ",events=groupEvents)
-                #"MERGE (u:TargetUser {remoteHost: e.remoteHost,EventRecordIDs: [ ],subjectUsernames: [ ], name:e.targetUser})",events=groupEvents)
-                
+                "MERGE (t:TargetHost {name:e.targetServer}) ",events=groupEvents)                
 
         print("[+] Event Correlation ...")
         with neo4jDriver.session() as session:
