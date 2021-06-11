@@ -512,26 +512,163 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
         
         print("[+] Adding the Events ...")
         with neo4jDriver.session() as session:
-            insertEvents = session.run("UNWIND $events as eventPros CREATE (e:Event) SET e=eventPros MERGE (r:RemoteHosts {name:e.remoteHost,remoteHostname:e.remoteHostname}) MERGE (u:TargetUser {remoteHost: e.remoteHost,EventRecordIDs: [ ],name:e.targetUser}) MERGE (t:TargetHost {name:e.targetServer})",events=groupEvents)
+            # Create Neo4j Nodes
+            insertEvents = session.run(
+                "UNWIND $events as eventPros "
+                "CREATE (e:Event) SET e=eventPros "
+                "MERGE (r:RemoteHosts {name:e.remoteHost,remoteHostname:e.remoteHostname}) "
+                "MERGE (t:TargetHost {name:e.targetServer}) ",events=groupEvents)
+                #"MERGE (u:TargetUser {remoteHost: e.remoteHost,EventRecordIDs: [ ],subjectUsernames: [ ], name:e.targetUser})",events=groupEvents)
+                
+
         print("[+] Event Correlation ...")
         with neo4jDriver.session() as session:
-            #Update node properties 
-            test = session.run("MATCH (u:TargetUser),(e:Event),(r:RemoteHosts),(t:TargetHost) WHERE u.name=e.targetUser AND r.name=e.remoteHost AND t.name=e.targetServer AND u.remoteHost = r.name AND NOT e.EventRecordID IN u.EventRecordIDs SET u.EventRecordIDs=u.EventRecordIDs+e.EventRecordID SET u.subjectUsername = e.SubjectUserName SET u.targetServer = e.targetServer")
-            createSubjectUsernameNode = session.run("MATCH (u:TargetUser) WHERE u.subjectUsername IS NOT NULL WITH u.EventRecordIDs as eventRecordIDs, u.subjectUsername as subjectUsername, u.remoteHost as remoteHost, u.targetServer as targetServer CREATE (b:TargetUser {name:subjectUsername}) SET b.EventRecordIDs = eventRecordIDs SET b.remoteHost = remoteHost SET b.IsSubjectUser = 'true' SET b.targetServer = targetServer")
-        print("[+] Delete Dublicates ...")
-        with neo4jDriver.session() as session:
-            deleteDublicates = session.run("MATCH (t:TargetUser) WITH t.name as n, t.remoteHost as r, collect(t) as dublicateTargetUser where size(dublicateTargetUser) > 1 UNWIND dublicateTargetUser[1..] AS p DETACH DELETE p")
-        print("[+] Creating the Relationships ...")
+            
+            # Create 'TargetUser' Node - Initialization 
+            createTargetUsers=session.run(
+                "MATCH (e:Event) "
+                "WHERE NOT EXISTS(e.SubjectUserName) OR NOT EXISTS(e.TargetUserName) "
+                "WITH collect(e.SubjectUserName) as SubjectUserNames,collect(e.TargetUserName) as TargetUserNames,e "
+                "UNWIND SubjectUserNames+TargetUserNames as TargetSubjectUserName "
+                "FOREACH(p in TargetSubjectUserName | MERGE (t:TargetUser {name:p,SubjectUsernames: [ ],EventRecordIDs: [ ],bindSubjectUserSids: [ ],remoteHost:e.remoteHost,targetServer:e.targetServer}) "
+                "SET t.IsCreated='true') "
+                )
+            
+            #Create 'TargetUser' Node from events that NOT having 'SubjectUserName' AND 'TargetUserName'.
+            # e.g. Windows Event ID 1116, 1117 etc.
+            createTargetUsers2=session.run(
+                "MATCH (e:Event) "
+                "WHERE NOT EXISTS(e.SubjectUserName) AND NOT EXISTS(e.TargetUserName) "
+                "WITH collect(e.targetUser) as TargetUserNames,e "
+                "UNWIND TargetUserNames AS TargetUserName "
+                "FOREACH(p in TargetUserName | MERGE (t:TargetUser {name:p,EventRecordIDs: [ ],remoteHost:e.remoteHost,targetServer:e.targetServer})) "
+            )
+
+             
+            # Create 'SubjectUser' Node - Initialization
+            createSubjectUsers=session.run(
+                "MATCH (e:Event) "
+                "WHERE EXISTS(e.SubjectUserName) AND EXISTS(e.TargetUserName) "
+                "WITH collect(e.SubjectUserName) as SubjectUserNames,e "
+                "UNWIND SubjectUserNames as SubjectUserName "
+                "FOREACH(p in SubjectUserName | MERGE (s:SubjectUser {name:p,TargetUsernames: [ ],EventRecordIDs: [ ],bindTargetUserSids: [ ],IsSubjectUser:'true',remoteHost:e.remoteHost,targetServer:e.targetServer,hasTargetUsernameTag:'true',hasSubjectUsernameTag:'true'}) "
+                "SET s.IsCreated='true') "
+                )
+            
+            # Update 'SubjectUser' node.
+            UpdateSubjectUsers = session.run(
+                "MATCH (e:Event),(r:RemoteHosts),(t:TargetHost),(u:TargetUser),(s:SubjectUser) "
+                "WHERE u.name=e.targetUser "
+                "AND r.name=e.remoteHost "
+                "AND t.name=e.targetServer "
+                "AND u.remoteHost = r.name "
+                "AND s.name=e.SubjectUserName " # This equation is important in order to add EventRecordID correctly.
+                "AND EXISTS(e.SubjectUserName) AND e.SubjectUserName IS NOT NULL "
+                "AND EXISTS(e.TargetUserName) AND e.TargetUserName IS NOT NULL "
+                "SET s.EventRecordIDs=[e.EventRecordID] " #Adding the first matched EventRecordID. On the FOREACH part is adding the rest.
+                "WITH collect(e.SubjectUserName) as subjectUsernames, e "
+                "UNWIND subjectUsernames AS subjectUsername "
+                "FOREACH(p IN subjectUsername | MERGE (b:SubjectUser {name:p}) "
+                "SET b.name=b.name+'(S)' "
+                "SET (CASE WHEN NOT e.EventRecordID IN b.EventRecordIDs THEN b END).EventRecordIDs=b.EventRecordIDs+e.EventRecordID "
+                "SET (CASE WHEN NOT e.TargetUserName IN b.TargetUsernames THEN b END).TargetUsernames=b.TargetUsernames+e.TargetUserName "
+                "SET (CASE WHEN NOT e.TargetUserSid IN b.bindTargetUserSids THEN b END).bindTargetUserSids=b.bindTargetUserSids+e.TargetUserSid "
+                "SET b.SubjectUserRealName=e.SubjectUserName)")
+
+                       
+            ### Update 'TargetUsers(T)' that have SubjectUsers.
+            updateTargetUserNode = session.run(
+                "MATCH (u:TargetUser),(e:Event),(r:RemoteHosts),(t:TargetHost) "
+                "WHERE u.name=e.targetUser "
+                "AND r.name=e.remoteHost "
+                "AND t.name=e.targetServer "
+                "AND u.remoteHost = r.name "
+                "AND EXISTS(e.SubjectUserName) "
+                "AND EXISTS(e.TargetUserName) "
+                "SET u.EventRecordIDs=[e.EventRecordID] "
+                "WITH collect(e.TargetUserName) as targetUsernames,e "
+                "UNWIND targetUsernames AS targetUsername "
+                "FOREACH(p IN targetUsername | MERGE (b:TargetUser {name:p}) "
+                "SET b.name=b.name+'(T)' "
+                "SET b.TargetRealName=e.targetUser "
+                "SET (CASE WHEN NOT e.EventRecordID IN b.EventRecordIDs THEN b END).EventRecordIDs=b.EventRecordIDs+e.EventRecordID "
+                "SET (CASE WHEN NOT e.SubjectUserName IN b.SubjectUsernames THEN b END).SubjectUsernames=b.SubjectUsernames+e.SubjectUserName "
+                #"SET b.remoteHost = e.remoteHost "
+                "SET b.IsSubjectUser = 'false' "
+                #"SET b.targetServer = e.targetServer "
+                "SET b.hasTargetUsernameTag='true' "
+                "SET b.hasSubjectUsernameTag='true' "
+                #"SET b.prodByEventRecordID=e.EventRecordID "
+                "SET (CASE WHEN NOT e.SubjectUserSid IN b.bindSubjectUserSids THEN b END).bindSubjectUserSids=b.bindSubjectUserSids+e.SubjectUserSid)")
+           
+           ### Update 'TargetUser' node BUT for users that DONT have SubjectUsers
+            updateTargetUserNode2=session.run(
+                "MATCH (u:TargetUser),(e:Event) "
+                "WHERE u.name=e.targetUser "
+                "AND u.remoteHost=e.remoteHost "
+                "AND u.targetServer=e.targetServer "
+                "AND NOT EXISTS (u.hasSubjectUserNameTag) "
+                "WITH collect(u.name) as targetUserNames,e "
+                "UNWIND targetUserNames as targetUserName "
+                "FOREACH (p in targetUserName | MERGE (c:TargetUser {name:p}) "
+                "SET c.hasSubjectUser='false' "
+                "SET (CASE WHEN NOT e.EventRecordID IN c.EventRecordIDs THEN c END).EventRecordIDs=c.EventRecordIDs+e.EventRecordID)"
+                )
+
         with neo4jDriver.session() as session:
             # Check if Event node has the 'SubjectUserName'. If yes, then the relationship is:
+            # IsSubjectTarget = Means that Event contains 'SubjectUserName'  property but has the same value with 'targetUsername'
             # RemoteHost -> User -> TargetUser -> EventID -> targetServer
-            allInOnerelationship = session.run("MATCH (u:TargetUser),(u2:TargetUser),(e:Event),(r:RemoteHosts),(t:TargetHost) WHERE u.name = u2.subjectUsername AND e.EventRecordID IN u.EventRecordIDs AND e.EventRecordID IN u2.EventRecordIDs AND u.name = e.SubjectUserName AND u.remoteHost = r.name AND u.IsSubjectUser = 'true' AND t.name = u2.targetServer MERGE (r)-[r1:RemoteHostTOSubjectUsername]-(u)-[r2:SubjectUsernameTOTargetuser]-(u2)-[r3:TargetUserTOEventID]-(e)-[r4:EventIDTOtargetHost]->(t) WITH collect(r1)[1..] as rels, collect(r2)[1..] as rels2 FOREACH (r1 in rels | DELETE r1) FOREACH (r2 in rels2 | DELETE r2)") 
-            remoteHost2DomUserRelationship=session.run("MATCH (r:RemoteHosts),(u:TargetUser) WHERE u.remoteHost = r.name AND u.IsSubjectUser IS NULL AND u.subjectUsername IS NULL MERGE (r)-[r5:Source2TargerUser]->(u)")
-        with neo4jDriver.session() as session:
-            targetUser2EventRelationship = session.run("MATCH (u:TargetUser),(e:Event) WHERE e.targetUser = u.name AND e.EventRecordID IN u.EventRecordIDs AND u.IsSubjectUser IS NULL AND u.subjectUsername IS NULL MERGE (u)-[r6:TargetUser2Event]->(e)")
-        with neo4jDriver.session() as session:
-            event2TargetHostRelationship= session.run("MATCH (t:TargetHost),(e:Event) WHERE t.name = e.targetServer AND e.SubjectUserName IS NULL MERGE (e)-[r7:Event2Destination]->(t)")
+        #    allInOnerelationship = session.run("MATCH (u:TargetUser),(u2:TargetUser),(e:Event),(r:RemoteHosts),(t:TargetHost) WHERE u.name IN u2.subjectUsernames AND e.EventRecordID IN u.EventRecordIDs AND e.EventRecordID IN u2.EventRecordIDs AND u.name = e.SubjectUserName AND u.remoteHost = r.name AND u.IsSubjectUser = 'true' AND u.IsTargetUser IS NULL AND t.name = u2.targetServer MERGE (r)-[r1:RemoteHostTOSubjectUsername]-(u)-[r2:SubjectUsernameTOTargetuser]-(u2)-[r3:TargetUserTOEventID]-(e)-[r4:EventIDTOtargetHost]->(t)") # WITH collect(r1)[1..] as rels, collect(r2)[1..] as rels2 FOREACH (r1 in rels | DELETE r1) FOREACH (r2 in rels2 | DELETE r2) 
+            SubjectUserTargetUserRelationship1 = session.run(
+                "MATCH (r:RemoteHosts),(t:TargetUser),(s:SubjectUser),(th:TargetHost),(e:Event) "
+                "WHERE t.IsSubjectUser='false' "
+                "AND e.remoteHost=r.name "
+                "AND s.remoteHost=r.name "
+                "AND t.remoteHost=s.remoteHost "
+                "AND s.SubjectUserRealName IN t.SubjectUsernames "
+                "AND t.targetServer=s.targetServer "
+                "AND EXISTS(e.TargetUserName) "
+                "AND EXISTS(e.SubjectUserName) "
+                "AND e.EventRecordID IN t.EventRecordIDs "
+                "MERGE (r)-[r1:RemoteHostTOSubjectUsername]-(s)-[r2:SubjectUsernameTOTargetuser]->(t)"
+                #"MERGE (r)-[r1:RemoteHostTOSubjectUsername]->(s)-[r2:SubjectUsernameTOTargetuser]-(t)-[r3:TargetUserTOEventID]-(e)-[r4:EventIDTOtargetHost]->(th)") #-[r3:TargetUserTOEventID]-(e)-[r4:EventIDTOtargetHost]->(th)
+            )
+            SubjectUserTargetUserRelationship2 = session.run(
+                "MATCH (t:TargetUser),(e:Event),(th:TargetHost) "
+                "WHERE t.IsSubjectUser='false' "
+                "AND t.targetServer=e.targetServer "
+                "AND t.remoteHost=e.remoteHost "
+                "AND e.EventRecordID IN t.EventRecordIDs "
+                "AND e.targetServer=th.name "
+                "AND EXISTS(e.TargetUserName) "
+                "AND EXISTS(e.SubjectUserName) "
+                "MERGE (t)-[r3:TargetUserTOEvent]-(e)-[r4:EventIDTOtargetHost]->(th)"
 
+            )
+           
+            #allInOnerelationship = session.run("MATCH (t:TargetUser),(th:TargetHost),(e:Event) WHERE e.targetUser=t.TargetRealName AND t.targetServer=th.name AND e.targetServer=th.name MERGE (t)-[m1:test1]-(e)-[m2:test2]->(th)")
+            #deleteDublicates_AllInOnerelationship = session.run("MATCH (r:RemoteHosts)-[r1]-(t:SubjectUser)-[r2]->(s:TargetUser) with r,t,s,type(r1) as typ, tail(collect(r1)) as coll foreach(x in coll | delete x)")
+            # Create relationships only for Users that NOT contains 'SubjectUserName'
+            remoteHost2DomUserRelationship=session.run(
+                "MATCH (r:RemoteHosts),(u:TargetUser) "
+                "WHERE u.remoteHost = r.name "
+                "AND u.hasSubjectUser='false' "
+                "MERGE (r)-[r5:Source2TargerUser]->(u)"
+                )
+            
+            targetUser2EventRelationship = session.run(
+                "MATCH (u:TargetUser),(e:Event),(t:TargetHost) "
+                "WHERE e.targetUser = u.name "
+                "AND t.name=e.targetServer "
+                "AND u.targetServer=t.name "
+                "AND e.EventRecordID IN u.EventRecordIDs "
+                "AND NOT EXISTS(u.hasSubjectUserNameTag) OR u.hasSubjectUsernameTag='false' "
+                "MERGE (u)-[r7:TargetUser2Event]-(e)-[r8:Event2TargetHost]->(t)"
+                )
+
+
+            
     except Exception as e:
         print(e)
 
