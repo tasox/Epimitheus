@@ -14,6 +14,7 @@ from pathlib import Path
 from xml.etree.cElementTree import Element, ElementTree
 from lxml import etree
 from io import StringIO, BytesIO
+import unicodedata
 
 
 def get_events(input_file, parse_xml=False):
@@ -855,7 +856,8 @@ if __name__ == '__main__':
                         
                         #Open exported XML and remove those chars - Step 1
                         openXMLread=open(fileFullPath,"r")
-                        fixChars=re.sub(r"ï»¿", r"", openXMLread.read()) #When Events exported from Windows Event Viewer has those bad chars inside the XML.
+                        fixChars=open(unicodedata.normalize("NFD", openXMLread.read()).encode('WINDOWS-1252', 'ignore'))
+                        #fixChars=re.sub(r"ï»¿", r"", openXMLread.read()) #When Events exported from Windows Event Viewer has those bad chars inside the XML.
                         openXMLread.close()
 
                         #Write again the XML without those chars -Step 2
@@ -911,7 +913,8 @@ if __name__ == '__main__':
                     
                     #Open exported XML and remove those chars
                     openXMLread=open(file,"r")
-                    fixChars=re.sub(r"ï»¿", r"", openXMLread.read()) #When Events exported from Windows Event Viewer has those bad chars inside the XML.
+                    fixChars=open(unicodedata.normalize("NFD", openXMLread.read()).encode('WINDOWS-1252', 'ignore'))
+                    #fixChars=re.sub(r"ï»¿", r"", openXMLread.read()) #When Events exported from Windows Event Viewer has those bad chars inside the XML.
                     openXMLread.close()
                     
                     #Write again the XML without those chars
