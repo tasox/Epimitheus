@@ -895,6 +895,7 @@ if __name__ == '__main__':
                     # Create an XML file with the same name as EVTX
                     evtx2xml = str(file).replace(".evtx", ".xml")
                     f = open(evtx2xml, "w")
+                    f.write("<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\"?>")
                     f.write("\n")
                     f.write("<Events>")
                     for x in evtxDoc:
