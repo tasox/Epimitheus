@@ -857,7 +857,7 @@ if __name__ == '__main__':
                         outXMLFile = generateOutXMLFileRandomName(eventsFolder)                     
                         
                         #Open exported XML and remove those chars - Step 1
-                        openXMLread=open(fileFullPath,"r")
+                        openXMLread=open(fileFullPath,"r",encoding="utf-8")
                         fixChars=re.sub(r"ï»¿", r"", openXMLread.read()) #When Events exported from Windows Event Viewer has those bad chars inside the XML.
                         # https://stackoverflow.com/questions/51710082/what-does-unicodedata-normalize-do-in-python
                         # https://godatadriven.com/blog/handling-encoding-issues-with-unicode-normalisation-in-python/
@@ -891,9 +891,7 @@ if __name__ == '__main__':
                     outXMLFile = generateOutXMLFileRandomName(file)
                     # Read the contents of the EVTX file.
                     evtxDoc = get_events(file)
-                    #Fix Unicode chars
-                    evtxDoc=unicodedata.normalize("NFKD", evtxDoc).encode('WINDOWS-1252', 'ignore').decode('UTF-8')
-
+                    
                     # Create an XML file with the same name as EVTX
                     evtx2xml = str(file).replace(".evtx", ".xml")
                     f = open(evtx2xml, "w")
@@ -903,7 +901,20 @@ if __name__ == '__main__':
                         f.write(x)
                     f.write("</Events>")    
                     f.close()
-                    rootDoc = minidom.parse(evtx2xml).documentElement
+                    
+                    
+                    #Fix Unicode chars
+                    readevtx2xml=open(evtx2xml,"r",encoding="utf-8")
+                    fixChars=re.sub(r'&#\d+;',r'',readevtx2xml.read())
+                    fixChars=unicodedata.normalize("NFKD", fixChars).encode('WINDOWS-1252', 'ignore').decode('UTF-8')
+                    readevtx2xml.close()
+
+                    file=file.replace(".evtx","_fixed.xml")
+                    openXMLwrite=open(file,"w")
+                    openXMLwrite.write(fixChars)
+                    openXMLwrite.close()
+
+                    rootDoc = minidom.parse(file).documentElement
                     parsingFunction(file,rootDoc,outXMLFile)
                     print("\n")
 
@@ -919,7 +930,7 @@ if __name__ == '__main__':
                     #outXMLFileArray.append(outXMLFile)
                     
                     #Open exported XML and remove those chars
-                    openXMLread=open(file,"r")
+                    openXMLread=open(file,"r",encoding="utf-8")
                     fixChars=re.sub(r"ï»¿", r"", openXMLread.read()) #When Events exported from Windows Event Viewer has those bad chars inside the XML.
                     # https://stackoverflow.com/questions/51710082/what-does-unicodedata-normalize-do-in-python
                     # https://godatadriven.com/blog/handling-encoding-issues-with-unicode-normalisation-in-python/
