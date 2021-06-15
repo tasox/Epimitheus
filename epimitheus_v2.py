@@ -325,7 +325,7 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                                 # Convert List results -> String e.g ['AD\Administrator'] -> 'AD\Administrator'
                                 targetUser = ' '.join(targetUser)
                                 #if exists then split the string and get the value after "=" e.g UserId=15241 grab the 15241
-                                targetUser = targetUser.strip().split("=")[1]
+                                targetUser = targetUser.split("=")[1].strip(' \n\t') 
                                 try:
                                     if targetUser in bListedUsers:
                                         print("[-] Event ID %s with Record ID %s discarded because the TargetUser %s is into the bListedUsers list." % (t.get("EventID"),t.get("EventRecordID"),targetUser))
