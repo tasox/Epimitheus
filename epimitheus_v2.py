@@ -182,7 +182,7 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
     doc.appendChild(root)
     counter=0 # Event counter
     #print(eventList.items()) #[OK]
-    print("[+] Searching for TargetUsers, RemoteHosts, TargetHosts ...")
+    print("[+] Searching for TargetUsers/Hosts, SourceUsers/Hosts, RemoteHosts/Users, TargetHosts/Users ...")
 
     if len(eventList.items()) > 0:
         
@@ -317,22 +317,27 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                     # Before search unpack the Event data which are List format.
                     for eventX in eventData:
                         try:
-                            if(re.findall('UserId=.*\w+.*',eventX)):
-                                # Find the "UserId" string inside the properties of an Event. If "exists" then catch the Username
-                                targetUser = re.findall('UserId=.*\w+.*',eventX)
-                                # Convert List results -> String e.g ['AD\Administrator'] -> 'AD\Administrator'
-                                targetUser = ' '.join(targetUser)
-                                #if exists then split the string and get the value after "=" e.g UserId=15241 grab the 15241
-                                targetUser = targetUser.split("=")[1]
-                                try:
-                                    if targetUser in bListedUsers:
-                                        print("[-] Event ID %s with Record ID %s discarded because the TargetUser %s is into the bListedUsers list." % (t.get("EventID"),t.get("EventRecordID"),targetUser))
-                                        break
-                                    else:
-                                        t.update({'targetUser':targetUser})
-                                except Exception as error:
-                                    print(error)
+                            
+                            if t.get("ContextInfo"): #PowerShell Events 4103,4104
 
+                                if(re.findall('[User|UserId|UserID]*.=',eventX)):
+                                    # Find the "UserId, User or UserId" string inside the 'ContextInfo'property of an Event. If "exists" then catch the Username
+                                    targetUser = re.findall('[User|UserId|UserID]*.=.*[\s]',eventX)
+                                    # Convert List results -> String e.g ['AD\Administrator'] -> 'AD\Administrator'
+                                    targetUser = ' '.join(targetUser)
+                                    #if exists then split the string and get the value after "=" e.g UserId=15241 grab the 15241
+                                    targetUser = targetUser.split("=")[1].strip()
+                                    try:
+                                        if targetUser in bListedUsers:
+                                            print("[-] Event ID %s with Record ID %s discarded because the TargetUser %s is into the bListedUsers list." % (t.get("EventID"),t.get("EventRecordID"),targetUser))
+                                            break
+                                        else:
+                                            t.update({'targetUser':targetUser})
+                                    except Exception as error:
+                                        print(error)
+                            elif t.get("UserID"):
+                                targetUser=t.get("UserID")
+                                t.update({'targetUser':targetUser})
                             else:
                                 #Some PowerShell events doesn't have the UserId property.
                                 #In this case, use a generic user, which is called `PSGenericUser` 
@@ -489,7 +494,7 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
         print(e)
         sys.exit(1)
 
-    blackListedEventProperties=["Opcode","Keywords","Version","Level","TransmittedServices","KeyLength","LmPackageName","Key Length","Message","SubjectDomainName","Guid","Provider","VirtualAccount","TicketEncryptionType","TicketOptions","Keywords","Level","KeyLength","CertIssuerName","CertSerialNumber","CertThumbprint","Channel","ObjectServer","PreAuth Type","TargetOutboundDomainName","FWLink","Unused","Unused2","Unused3","Unused4","Unused5","Unused6","OriginID","OriginName","ErrorCode","TypeID","TypeName","StatusDescription","AdditionalActionsID","SubStatus","ContextInfo","Product"]
+    blackListedEventProperties=["Opcode","Keywords","Version","Level","TransmittedServices","KeyLength","LmPackageName","Key Length","Message","SubjectDomainName","Guid","Provider","VirtualAccount","TicketEncryptionType","TicketOptions","Keywords","Level","KeyLength","CertIssuerName","CertSerialNumber","CertThumbprint","Channel","ObjectServer","PreAuth Type","TargetOutboundDomainName","FWLink","Unused","Unused2","Unused3","Unused4","Unused5","Unused6","OriginID","OriginName","ErrorCode","TypeID","TypeName","StatusDescription","AdditionalActionsID","SubStatus","Product"]
 
     counter=0
     groupEvents=[] #Example [{ EventId: "4624",targetUser:"tasos"},{EventId: "4625", targetUser: "tzonis"}]
@@ -828,14 +833,13 @@ if __name__ == '__main__':
                         
                         # Read the contents of the EVTX file.
                         evtxDoc = get_events(fileFullPath)
-                        #Fix Unicode chars
-                        evtxDoc=unicodedata.normalize("NFKD", evtxDoc).encode('WINDOWS-1252', 'ignore').decode('UTF-8')
 
                         # Create an XML file with the same name as EVTX
                         #evtx2xml = str(file).replace(".evtx", ".xml")
-                        file = str(fileFullPath).replace(".evtx", ".xml")
+                        evtx2xml = str(fileFullPath).replace(".evtx", ".xml")
 
-                        f = open(file, "w")
+                        f = open(evtx2xml, "w")
+                        f.write("<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\"?>")
                         f.write("\n")
                         f.write("<Events>")
                         for x in evtxDoc:
@@ -846,9 +850,27 @@ if __name__ == '__main__':
                         parsingFunction(file,rootDoc,outXMLFile)
                         print("\n")
                         
+                        print("[+] I'm fixing the fualty chars, I need sometime for that ...")
+
+                        #Fix Unicode chars
+                        readevtx2xml=open(evtx2xml,"r",encoding="utf-8")
+                        fixChars=re.sub(r'&#\d+;',r'',readevtx2xml.read())
+                        fixChars=unicodedata.normalize("NFKD", fixChars).encode('WINDOWS-1252', 'ignore').decode('UTF-8')
+                        readevtx2xml.close()
+
+                        file=file.replace(".evtx","_fixed.xml")
+                        openXMLwrite=open(file,"w")
+                        openXMLwrite.write(fixChars)
+                        openXMLwrite.close()
+
+                        rootDoc = minidom.parse(file).documentElement
+                        parsingFunction(file,rootDoc,outXMLFile)
+                        print("\n")
+
                         # Remove temp files
                         os.remove(outXMLFile)
-                        os.remove(file)                        
+                        os.remove(evtx2xml)
+                        os.remove(file)              
 
                     if os.path.isfile(fileFullPath) and files.endswith('.xml'):
                         #Get the file which all the events will be imported befored moved to neo4j.
@@ -903,7 +925,8 @@ if __name__ == '__main__':
                     f.write("</Events>")    
                     f.close()
                     
-                    
+                    print("[+] I'm fixing the fualty chars, I need sometime for that ...")
+
                     #Fix Unicode chars
                     readevtx2xml=open(evtx2xml,"r",encoding="utf-8")
                     fixChars=re.sub(r'&#\d+;',r'',readevtx2xml.read())
@@ -921,7 +944,8 @@ if __name__ == '__main__':
 
                     # Remove temp files
                     os.remove(outXMLFile)
-                    os.remove(evtx2xml)  
+                    os.remove(evtx2xml)
+                    os.remove(file)  
                 
                 elif file.endswith('.xml'):
                     
