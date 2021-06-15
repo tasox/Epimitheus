@@ -318,13 +318,14 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                     for eventX in eventData:
                         try:
 
-                            if(re.findall('[User|UserId|UserID]*.=',eventX)):
+                            # Try to match on the 
+                            if(re.findall('User[|Id|ID].*=',eventX)):
                                 # Find the "UserId, User or UserId" string inside the 'ContextInfo'property of an Event. If "exists" then catch the Username
-                                targetUser = re.findall('[User|UserId|UserID]*.=.*[\s]',eventX)
+                                targetUser = re.findall('User[|Id|ID].*=*[\s]',eventX)
                                 # Convert List results -> String e.g ['AD\Administrator'] -> 'AD\Administrator'
                                 targetUser = ' '.join(targetUser)
                                 #if exists then split the string and get the value after "=" e.g UserId=15241 grab the 15241
-                                targetUser = targetUser.split("=")[1].strip()
+                                targetUser = targetUser.split("=")[1].strip().split(' ')[0]
                                 try:
                                     if targetUser in bListedUsers:
                                         print("[-] Event ID %s with Record ID %s discarded because the TargetUser %s is into the bListedUsers list." % (t.get("EventID"),t.get("EventRecordID"),targetUser))
