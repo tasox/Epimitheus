@@ -317,27 +317,27 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                     # Before search unpack the Event data which are List format.
                     for eventX in eventData:
                         try:
-                            
-                            if t.get("ContextInfo"): #PowerShell Events 4103,4104
 
-                                if(re.findall('[User|UserId|UserID]*.=',eventX)):
-                                    # Find the "UserId, User or UserId" string inside the 'ContextInfo'property of an Event. If "exists" then catch the Username
-                                    targetUser = re.findall('[User|UserId|UserID]*.=.*[\s]',eventX)
-                                    # Convert List results -> String e.g ['AD\Administrator'] -> 'AD\Administrator'
-                                    targetUser = ' '.join(targetUser)
-                                    #if exists then split the string and get the value after "=" e.g UserId=15241 grab the 15241
-                                    targetUser = targetUser.split("=")[1].strip()
-                                    try:
-                                        if targetUser in bListedUsers:
-                                            print("[-] Event ID %s with Record ID %s discarded because the TargetUser %s is into the bListedUsers list." % (t.get("EventID"),t.get("EventRecordID"),targetUser))
-                                            break
-                                        else:
-                                            t.update({'targetUser':targetUser})
-                                    except Exception as error:
-                                        print(error)
+                            if(re.findall('[User|UserId|UserID]*.=',eventX)):
+                                # Find the "UserId, User or UserId" string inside the 'ContextInfo'property of an Event. If "exists" then catch the Username
+                                targetUser = re.findall('[User|UserId|UserID]*.=.*[\s]',eventX)
+                                # Convert List results -> String e.g ['AD\Administrator'] -> 'AD\Administrator'
+                                targetUser = ' '.join(targetUser)
+                                #if exists then split the string and get the value after "=" e.g UserId=15241 grab the 15241
+                                targetUser = targetUser.split("=")[1].strip()
+                                try:
+                                    if targetUser in bListedUsers:
+                                        print("[-] Event ID %s with Record ID %s discarded because the TargetUser %s is into the bListedUsers list." % (t.get("EventID"),t.get("EventRecordID"),targetUser))
+                                        break
+                                    else:
+                                        t.update({'targetUser':targetUser})
+                                except Exception as error:
+                                    print(error)
+
                             elif t.get("UserID"):
                                 targetUser=t.get("UserID")
                                 t.update({'targetUser':targetUser})
+                            
                             else:
                                 #Some PowerShell events doesn't have the UserId property.
                                 #In this case, use a generic user, which is called `PSGenericUser` 
