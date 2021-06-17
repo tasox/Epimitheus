@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 
+from logging import NullHandler
 from xml.dom import minidom
 from xml.dom.minidom import Document
 from neo4j import GraphDatabase, basic_auth
@@ -218,6 +219,10 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
             for eventValue in value: # Value holds the Event data, Keys and Values in Dict format {'EventID':'4624'}
                 #https://stackoverflow.com/questions/54488095/python-3-dictionary-key-to-a-string-and-value-to-another-string
                 key, value = list(eventValue.items())[0]
+                # Unpack the 'Data' part of Event and update the 'Event' node.
+                if key == "Data":
+                    t.update(value)
+                
                 #if <Data> tag exists dictionary of the Event then append the inside
                 if "Data" in t:
                     t["Data"].append(value)
@@ -226,9 +231,11 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                 elif key == "Data":
                     t["Data"]=[]
                     t["Data"].append(value)
+                   
                 #Otherwise, just update the dictionary
                 else:   
                     t.update(eventValue)
+
             ####################################REMOTE HOSTS######################################################
             #Extract remote IPs from Event, 
             # if IP source field does not exist then extact from the 'TargetServerName', 
@@ -427,22 +434,11 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                             print("[-] CommandPath RegEx error!")
                             print(error)
                         
-                        try:                        
-                            if(re.findall('SequenceNumber.*=',str(eventX))):
-                               SequenceNumber = re.findall('SequenceNumber.*=.*\w+.*',str(eventX))
-                               SequenceNumber = ' '.join(SequenceNumber)
-                               SequenceNumber = SequenceNumber.split("=")[1]
-                               t.update({'SequenceNumber':SequenceNumber})
-                               #print(SequenceNumber)
-                        except Exception as error:
-                               print("[-] SequenceNumber RegEx error!")
-                               print(error)
-                        
                         try:
                             if(re.findall('Severity.*=',str(eventX))):
                                Severity = re.findall('Severity.*=.[a-zA-Z]+',str(eventX))
                                Severity = ' '.join(Severity)
-                               Severity = Severity.split("=")[1]
+                               Severity = Severity.split("=")[1].split(" ")[0]
                                t.update({'Severity':Severity})
                                #print(Severity)
                         
@@ -450,7 +446,7 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                             print("[-] Severity RegEx error!")
                             print(error)
 
-                        try:
+                        '''try:
                             if(eventX.get('Payload')):
                                Payload = eventX.get('Payload').strip()
                                t.update({'Payload':Payload})
@@ -466,16 +462,16 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
 
                         except Exception as error:
                             print("[-] ScriptBlockText RegEx error!")
-                            print(error)
+                            print(error)'''
 
-                        try:
-                            if(eventX.get('Path')):
+                        '''try:
+                            if eventX.get('Path'):
                                Path = eventX.get('Path').strip()
                                t.update({'Path':Path})
 
                         except Exception as error:
                             print("[-] Path RegEx error!")
-                            print(error)
+                            print(error)'''
 
                     # print(t.get('EventRecordID')+"-->"+t.get('targetUser')) [OK]
                 
