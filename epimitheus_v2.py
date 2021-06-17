@@ -446,33 +446,6 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                             print("[-] Severity RegEx error!")
                             print(error)
 
-                        '''try:
-                            if(eventX.get('Payload')):
-                               Payload = eventX.get('Payload').strip()
-                               t.update({'Payload':Payload})
-
-                        except Exception as error:
-                            print("[-] Payload RegEx error!")
-                            print(error)
-                        
-                        try:
-                            if(eventX.get('ScriptBlockText')):
-                               ScriptBlockText = eventX.get('ScriptBlockText').strip()
-                               t.update({'ScriptBlockText':ScriptBlockText})
-
-                        except Exception as error:
-                            print("[-] ScriptBlockText RegEx error!")
-                            print(error)'''
-
-                        '''try:
-                            if eventX.get('Path'):
-                               Path = eventX.get('Path').strip()
-                               t.update({'Path':Path})
-
-                        except Exception as error:
-                            print("[-] Path RegEx error!")
-                            print(error)'''
-
                     # print(t.get('EventRecordID')+"-->"+t.get('targetUser')) [OK]
                 
                 except Exception as error:
