@@ -113,26 +113,51 @@ def eventParser(eventIDs,xmlDoc):
                         else:
                             attrs=y.attributes.items()
                         #print(attrs) #[OK]                         
-                        ###############################################################################
                         
                         dict={'Tags':tag,'Attrs':attrs,'Value':value}
-                        if not dict['Attrs']:
+                        
+                        if not dict['Attrs'] and dict['Tags'] != 'Data':
                             #print ("[+]%s:%s" %(dict['Tags'],dict['Value'])) #[OK]
-                            key = dict['Tags']
+                            tags = dict['Tags']
+                            values = dict['Value']
+
+                        elif dict['Attrs'] and dict['Tags'] != 'Data':
+                            for key,value in dict['Attrs']:
+                                #print("[+]%s:%s" % (key,value))
+                                tags = key
+                                values = value
+                        
+                        elif dict['Attrs'] and dict['Tags'] == 'Data':
+                            #print("[+]%s:%s" % (key,value))
+                            tags = dict['Tags']
+                            for attrKey,attrValue in dict['Attrs']:
+                                attrValue=attrValue
                             value = dict['Value']
-                        for key,value in dict['Attrs']:
+                            values = {attrValue:value}
+
+                        '''for key,value in dict['Attrs']:
                             if dict['Tags'] != 'Data':
                                 #print("[+]%s:%s" % (key,value))
+                                #print ("[+]%s:%s" %(dict['Tags'],dict['Attrs']))
                                 key = key
                                 value = value
-                            else:
+                                
+                            elif dict['Tags'] == 'Data':
                                 #print("[+]%s:%s" % (value, dict['Value']))
-                                key = value
-                                value = dict['Value']
-                        #print ("[+]%s:%s" % (key,value))
+                                #key = value
+                                #value = dict['Value']
+                                
+                                ####dict4["Data"]={value:dict['Value']}
+                                ###key2=dict.get('Tags')
+                                value2={value:dict['Value']}'''
+                            
+                                               
+                        dict2={tags:values}
+                        #print(dict2)
                                                 
-                        dict2={key:value}     
                         dict3={counter:dict2}
+                        #print(dict3)
+                        
                         t.append(dict3)
                     except:
                         pass
@@ -142,7 +167,7 @@ def eventParser(eventIDs,xmlDoc):
     # List before EventID filtering
     input_list = {}
 
-   
+    
     #Group events
     for x in range(len(t)):
         for k,v in t[x].items():
@@ -150,7 +175,7 @@ def eventParser(eventIDs,xmlDoc):
                 input_list[k]=[v]
             else:
                 input_list[k].append(v)
-
+    #print(input_list)
     # Event filtering procedure.
     input_list2 = {}
     for key,value in input_list.items():
@@ -186,16 +211,13 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
 
     if len(eventList.items()) > 0:
         
-       
         for key, value in eventList.items():
             
             t={} #This dictionary Holds the properties of every event.
-            
             #Unpacking the List -> Dict Event's keys and values            
             for eventValue in value: # Value holds the Event data, Keys and Values in Dict format {'EventID':'4624'}
                 #https://stackoverflow.com/questions/54488095/python-3-dictionary-key-to-a-string-and-value-to-another-string
                 key, value = list(eventValue.items())[0]
-                
                 #if <Data> tag exists dictionary of the Event then append the inside
                 if "Data" in t:
                     t["Data"].append(value)
@@ -207,8 +229,6 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                 #Otherwise, just update the dictionary
                 else:   
                     t.update(eventValue)
-            
-
             ####################################REMOTE HOSTS######################################################
             #Extract remote IPs from Event, 
             # if IP source field does not exist then extact from the 'TargetServerName', 
@@ -283,7 +303,7 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
 
             ##################################END - MESSAGE TAG###################################################################
             
-            if (t.get("EventID") not in ["4103","4104","400","403","500","501","600","800"]): # Not In Powershell Events
+            if (t.get("EventID") not in ["4100","4103","4104","400","403","500","501","600","800"]): # Not In Powershell Events
                 
                 
                 try:
@@ -308,34 +328,41 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                 t.update({'targetUser':targetUser})
             
             # PowerShell logging cheatsheet: https://static1.squarespace.com/static/552092d5e4b0661088167e5c/t/5760096ecf80a129e0b17634/1465911664070/Windows+PowerShell+Logging+Cheat+Sheet+ver+June+2016+v2.pdf
-            elif t.get("EventID") in ["4103","4104","400","403","500","501","600","800"]:
+            elif t.get("EventID") in ["4100","4103","4104","400","403","500","501","600","800"]:
                 
                 eventData = t.get("Data")
+
+                #matchUsers = ["User=","User = ","UserId=","UserId =","UserID=","UserID ="]
+                matchHostApplication = ["Host Application","HostApplication"]
+
                 try:
 
                     #Check if the word "User=" or "UserId=" etc. exists inside the <Data> tag
                     # Before search unpack the Event data which are List format.
                     for eventX in eventData:
+
                         try:
 
                             # Try find usernames on Description part of the Event e.g 4103,4104,800 
-                            if(re.findall('User[|Id|ID].*=',eventX)):
+                            if eventX.get("ContextInfo"): # any(x in str(eventX) for x in matchUsers):
                                 # Find the "UserId, User or UserId" string inside the 'ContextInfo'property of an Event. If "exists" then catch the Username
-                                targetUser = re.findall('User[|Id|ID].*=*[\s]',eventX)
+                                targetUser = re.findall('Use[rId|rID|r].*=.[\a-zA-Z0-9]+',eventX.get("ContextInfo"))
                                 # Convert List results -> String e.g ['AD\Administrator'] -> 'AD\Administrator'
                                 targetUser = ' '.join(targetUser)
                                 #if exists then split the string and get the value after "=" e.g UserId=15241 grab the 15241
-                                targetUser = targetUser.split("=")[1].strip(' \n\t') 
+                                targetUser = targetUser.split("=")[1].strip().split(" ")[0].strip()
+
                                 try:
                                     if targetUser in bListedUsers:
                                         print("[-] Event ID %s with Record ID %s discarded because the TargetUser %s is into the bListedUsers list." % (t.get("EventID"),t.get("EventRecordID"),targetUser))
                                         break
                                     else:
                                         t.update({'targetUser':targetUser})
+
                                 except Exception as error:
                                     print(error)
 
-                            elif t.get("UserID"):
+                            elif not t.get("targetUser") and t.get("UserID"):
                                 targetUser=t.get("UserID")
                                 t.update({'targetUser':targetUser})
                             
@@ -346,99 +373,118 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                                 if not t.get("targetUser"):
                                     targetUser = "PSGenericUser"
                                     t.update({'targetUser':targetUser})
-                        
+
                         except Exception as error:
                             print(error)
                              
                         try:        
-                            if(re.findall('HostApplication=.*\w+.*',eventX)):
-                                # Find the "UserId" string inside the properties of an Event. If "exists" then catch the Username
-                                HostApplication = re.findall('HostApplication=.*\w+.*',eventX)
-                                # Convert List results -> String e.g ['AD\Administrator'] -> 'AD\Administrator'
+                            if any(x in str(eventX) for x in matchHostApplication):
+                                if re.findall('HostApplication.*=',str(eventX)):    
+                                    HostApplication = re.findall('HostApplication.*=.[\a-zA-Z0-9]+Engine Version',str(eventX))
+                                else:
+                                    HostApplication = re.findall('Host Application.*=.[\a-zA-Z0-9]+Engine Version',str(eventX))
                                 HostApplication = ' '.join(HostApplication)
-                                #if exists then split the string and get the value after "=" e.g UserId=15241 grab the 15241
-                                HostApplication = HostApplication.split("=")[1]
-                                #print(HostApplication)
+                                HostApplication = HostApplication.replace("Engine Version","").strip()
+                                HostApplication = HostApplication.split("=")[1].strip()
                                 t.update({'HostApplication':HostApplication})
                         
                         except Exception as error:    
+                            print("[-] HostApplication RegEx error!")
                             print(error)
                         
                         try:
-                            if(re.findall('ScriptName=.*\w+.*',eventX)):
-                                # Find the "UserId" string inside the properties of an Event. If "exists" then catch the Username
-                                ScriptName = re.findall('ScriptName=.*\w+.*',eventX)
-                                # Convert List results -> String e.g ['AD\Administrator'] -> 'AD\Administrator'
+                            if(re.findall('ScriptName.*=',str(eventX))):
+                                ScriptName = re.findall('ScriptName.*=.*\w+.*',eventX)
                                 ScriptName = ' '.join(ScriptName)
-                                #if exists then split the string and get the value after "=" e.g UserId=15241 grab the 15241
                                 ScriptName = ScriptName.split("=")[1]
                                 t.update({'ScriptName':ScriptName})
                                 #print(ScriptName)
                                 
                         except Exception as error:     
+                            print("[-] ScriptName RegEx error!")
                             print(error)
                         
                         try:
-                            if(re.findall('CommandLine=.*\w+.*',eventX)):
-                                # Find the "UserId" string inside the properties of an Event. If "exists" then catch the Username
-                                CommandLine = re.findall('CommandLine=.*\w+.*',eventX)
-                                # Convert List results -> String e.g ['AD\Administrator'] -> 'AD\Administrator'
+                            if(re.findall('CommandLine.*=',str(eventX))):
+                                CommandLine = re.findall('CommandLine.*=.*\w+.*',str(eventX))
                                 CommandLine = ' '.join(CommandLine)
-                                #if exists then split the string and get the value after "=" e.g UserId=15241 grab the 15241
                                 CommandLine = CommandLine.split("=")[1]
                                 t.update({'CommandLine':CommandLine})
                                 #print(CommandLine)
                         except Exception as error:
-                            print(error)
+                            print("[-] commandLine RegEx error!")
+                            print(error)    
                         
                         try:    
-                            if(re.findall('CommandPath=.*\w+.*',eventX)):
-                                # Find the "UserId" string inside the properties of an Event. If "exists" then catch the Username
-                                CommandPath = re.findall('CommandPath=.*\w+.*',eventX)
-                                # Convert List results -> String e.g ['AD\Administrator'] -> 'AD\Administrator'
+                            if(re.findall('CommandPath.*=',str(eventX))):
+                                CommandPath = re.findall('CommandPath.*=.*\w+.*',str(eventX))
                                 CommandPath = ' '.join(CommandPath)
-                                #if exists then split the string and get the value after "=" e.g UserId=15241 grab the 15241
                                 CommandPath = CommandPath.split("=")[1]
                                 t.update({'CommandPath':CommandPath})
                                 #print(CommandPath)
                                 
                         except Exception as error:
+                            print("[-] CommandPath RegEx error!")
                             print(error)
                         
                         try:                        
-                            if(re.findall('SequenceNumber=.*\w+.*',eventX)):
-                               # Find the "UserId" string inside the properties of an Event. If "exists" then catch the Username
-                               SequenceNumber = re.findall('SequenceNumber=.*\w+.*',eventX)
-                               # Convert List results -> String e.g ['AD\Administrator'] -> 'AD\Administrator'
+                            if(re.findall('SequenceNumber.*=',str(eventX))):
+                               SequenceNumber = re.findall('SequenceNumber.*=.*\w+.*',str(eventX))
                                SequenceNumber = ' '.join(SequenceNumber)
-                               #if exists then split the string and get the value after "=" e.g UserId=15241 grab the 15241
                                SequenceNumber = SequenceNumber.split("=")[1]
                                t.update({'SequenceNumber':SequenceNumber})
                                #print(SequenceNumber)
                         except Exception as error:
+                               print("[-] SequenceNumber RegEx error!")
                                print(error)
                         
                         try:
-                            if(re.findall('Severity=.*\w+.*',eventX)):
-                               # Find the "UserId" string inside the properties of an Event. If "exists" then catch the Username
-                               Severity = re.findall('Severity=.*\w+.*',eventX)
-                               # Convert List results -> String e.g ['AD\Administrator'] -> 'AD\Administrator'
+                            if(re.findall('Severity.*=',str(eventX))):
+                               Severity = re.findall('Severity.*=.[a-zA-Z]+',str(eventX))
                                Severity = ' '.join(Severity)
-                               #if exists then split the string and get the value after "=" e.g UserId=15241 grab the 15241
                                Severity = Severity.split("=")[1]
                                t.update({'Severity':Severity})
                                #print(Severity)
                         
                         except Exception as error:
+                            print("[-] Severity RegEx error!")
                             print(error)
-                       
+
+                        try:
+                            if(eventX.get('Payload')):
+                               Payload = eventX.get('Payload').strip()
+                               t.update({'Payload':Payload})
+
+                        except Exception as error:
+                            print("[-] Payload RegEx error!")
+                            print(error)
+                        
+                        try:
+                            if(eventX.get('ScriptBlockText')):
+                               ScriptBlockText = eventX.get('ScriptBlockText').strip()
+                               t.update({'ScriptBlockText':ScriptBlockText})
+
+                        except Exception as error:
+                            print("[-] ScriptBlockText RegEx error!")
+                            print(error)
+
+                        try:
+                            if(eventX.get('Path')):
+                               Path = eventX.get('Path').strip()
+                               t.update({'Path':Path})
+
+                        except Exception as error:
+                            print("[-] Path RegEx error!")
+                            print(error)
 
                     # print(t.get('EventRecordID')+"-->"+t.get('targetUser')) [OK]
                 
                 except Exception as error:
                     print("[-] Something went wrong while parsing the PowerShell Events!")
+                    print("[+] Event ID: "+str(t.get("EventID"))+" with Record ID: "+str(t.get("EventRecordID")))
                     print(error)
-               
+
+                #print(t)
                                 
                 
             else:
