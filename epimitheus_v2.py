@@ -401,7 +401,7 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                         
                         try:
                             if(re.findall('ScriptName.*=',str(eventX))):
-                                ScriptName = re.findall('ScriptName.*=.*\w+.*',eventX)
+                                ScriptName = re.findall('ScriptName.*=.*\w+.*',str(eventX))
                                 ScriptName = ' '.join(ScriptName)
                                 ScriptName = ScriptName.split("=")[1]
                                 t.update({'ScriptName':ScriptName})
@@ -837,10 +837,10 @@ if __name__ == '__main__':
                 
                 dirFiles = os.listdir(eventsFolder)
 
-                for files in dirFiles:
+                for file in dirFiles:
                     
-                    fileFullPath = eventsFolder / files
-                    if os.path.isfile(fileFullPath) and files.endswith('.evtx'):
+                    fileFullPath = eventsFolder / file
+                    if os.path.isfile(fileFullPath) and file.endswith('.evtx'):
                         
                         #Get the file which all the events will be imported befored moved to neo4j.
                         # It just an empty file which will be filled in with Events
@@ -853,7 +853,6 @@ if __name__ == '__main__':
                         # Create an XML file with the same name as EVTX
                         #evtx2xml = str(file).replace(".evtx", ".xml")
                         evtx2xml = str(fileFullPath).replace(".evtx", ".xml")
-
                         f = open(evtx2xml, "w")
                         f.write("<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\"?>")
                         f.write("\n")
@@ -862,8 +861,7 @@ if __name__ == '__main__':
                             f.write(x)
                         f.write("</Events>")    
                         f.close()
-                        rootDoc = minidom.parse(file).documentElement
-                        parsingFunction(file,rootDoc,outXMLFile)
+                        rootDoc = minidom.parse(evtx2xml).documentElement
                         print("\n")
                         
                         print("[+] I'm fixing the fualty chars, I need sometime for that ...")
@@ -871,7 +869,7 @@ if __name__ == '__main__':
                         #Fix Unicode chars
                         readevtx2xml=open(evtx2xml,"r",encoding="utf-8")
                         fixChars=re.sub(r'&#\d+;',r'',readevtx2xml.read())
-                        fixChars=unicodedata.normalize("NFKD", fixChars).encode('WINDOWS-1252', 'ignore').decode('UTF-8')
+                        fixChars=unicodedata.normalize("NFKD", fixChars).encode('WINDOWS-1252', 'ignore').decode('utf-8')
                         readevtx2xml.close()
 
                         file=file.replace(".evtx","_fixed.xml")
@@ -886,9 +884,9 @@ if __name__ == '__main__':
                         # Remove temp files
                         os.remove(outXMLFile)
                         os.remove(evtx2xml)
-                        os.remove(file)              
+                        os.remove(file)
 
-                    if os.path.isfile(fileFullPath) and files.endswith('.xml'):
+                    if os.path.isfile(fileFullPath) and file.endswith('.xml') and not file.endswith('_fixed.xml'):
                         #Get the file which all the events will be imported befored moved to neo4j.
                         # It just an empty file which will be filled in with Events
                         #print(fileFullPath) #OK
@@ -897,9 +895,10 @@ if __name__ == '__main__':
                         #Open exported XML and remove those chars - Step 1
                         openXMLread=open(fileFullPath,"r",encoding="utf-8")
                         fixChars=re.sub(r"ï»¿", r"", openXMLread.read()) #When Events exported from Windows Event Viewer has those bad chars inside the XML.
+                        fixChars=re.sub(r'&#\d+;',r'',fixChars) # Clean the Unicode chars.
                         # https://stackoverflow.com/questions/51710082/what-does-unicodedata-normalize-do-in-python
                         # https://godatadriven.com/blog/handling-encoding-issues-with-unicode-normalisation-in-python/
-                        fixChars=unicodedata.normalize("NFKD", fixChars).encode('WINDOWS-1252', 'ignore').decode('UTF-8')
+                        fixChars=unicodedata.normalize("NFKD", fixChars).encode('WINDOWS-1252', 'ignore').decode('utf-8')
                         openXMLread.close()
 
                         #Write again the XML without those chars -Step 2
@@ -915,7 +914,7 @@ if __name__ == '__main__':
 
                         # Remove temp files
                         os.remove(outXMLFile)
-                        os.remove(file)  
+                        os.remove(file)
                     
             # User provided a file and not a directory.
             else:
@@ -961,7 +960,7 @@ if __name__ == '__main__':
                     # Remove temp files
                     os.remove(outXMLFile)
                     os.remove(evtx2xml)
-                    os.remove(file)  
+                    os.remove(file) 
                 
                 elif file.endswith('.xml'):
                     
@@ -973,6 +972,7 @@ if __name__ == '__main__':
                     #Open exported XML and remove those chars
                     openXMLread=open(file,"r",encoding="utf-8")
                     fixChars=re.sub(r"ï»¿", r"", openXMLread.read()) #When Events exported from Windows Event Viewer has those bad chars inside the XML.
+                    fixChars=re.sub(r'&#\d+;',r'',fixChars)
                     # https://stackoverflow.com/questions/51710082/what-does-unicodedata-normalize-do-in-python
                     # https://godatadriven.com/blog/handling-encoding-issues-with-unicode-normalisation-in-python/
                     fixChars=unicodedata.normalize("NFKD", fixChars).encode('WINDOWS-1252', 'ignore').decode('UTF-8')
@@ -989,7 +989,7 @@ if __name__ == '__main__':
 
                     # Remove temp files
                     os.remove(outXMLFile)
-                    os.remove(file)  
+                    os.remove(file)
                 
                 else:
                     print("[!] Provide an XML or EVTX file! ")
