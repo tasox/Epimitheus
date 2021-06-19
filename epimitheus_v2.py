@@ -310,7 +310,7 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
 
             ##################################END - MESSAGE TAG###################################################################
             
-            if (t.get("EventID") not in ["4100","4103","4104","400","403","500","501","600","800"]): # Not In Powershell Events
+            if (t.get("EventID") not in ["4100","4103","4104","400","403","500","501","600","800"] and not "PowerShell" in t.get("Channel")): # Not In Powershell Events
                 
                 
                 try:
