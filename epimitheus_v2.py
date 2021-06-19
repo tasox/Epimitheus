@@ -520,9 +520,8 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
         for eventTagNode in neo4jDocXML.childNodes:
             dictionaryEvents=dict() # {EventId: "4624",targetUser:"tasos"},{EventId: "4625", targetUser: "tzonis"}
             if eventTagNode.childNodes:
-                #print(eventTagNode.childNodes) [OK]
+                #print(eventTagNode.childNodes) #[OK]
                 for eventTags in eventTagNode.childNodes:
-                    #print(eventTags.nodeName)
                     if (eventTags.nodeName not in blackListedEventProperties):
                         for eventValues in eventTags.childNodes:
                             #print(eventTags.nodeName,eventValues.nodeValue)
@@ -537,9 +536,14 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
             # Create Neo4j Nodes
             insertEvents = session.run(
                 "UNWIND $events as eventPros "
-                "CREATE (e:Event) SET e=eventPros "
+                #OK#"CREATE (e:Event) SET e=eventPros "
+                #OK#"MERGE (r:RemoteHosts {name:e.remoteHost,remoteHostname:e.remoteHostname}) "
+                #OK#"MERGE (t:TargetHost {name:e.targetServer}) ",events=groupEvents) 
+                
+                "MERGE (e:Event {EventRecordID:eventPros.EventRecordID}) SET e=eventPros " #Avoid dublicate Events with MERGE and filtering.
                 "MERGE (r:RemoteHosts {name:e.remoteHost,remoteHostname:e.remoteHostname}) "
-                "MERGE (t:TargetHost {name:e.targetServer}) ",events=groupEvents)                
+                "MERGE (t:TargetHost {name:e.targetServer}) ",events=groupEvents)
+                         
 
         print("[+] Event Correlation ...")
         with neo4jDriver.session() as session:
@@ -551,7 +555,8 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "WITH collect(e.SubjectUserName) as SubjectUserNames,collect(e.TargetUserName) as TargetUserNames,e "
                 "UNWIND SubjectUserNames+TargetUserNames as TargetSubjectUserName "
                 "FOREACH(p in TargetSubjectUserName | MERGE (t:TargetUser {name:p,SubjectUsernames: [ ],EventRecordIDs: [ ],bindSubjectUserSids: [ ],remoteHost:e.remoteHost,targetServer:e.targetServer}) "
-                "SET t.IsCreated='true') "
+                "SET t.IsCreated='true' "
+                "SET t.CreatedByEventRecordID=e.EventRecordID) "
                 )
             
             #Create 'TargetUser' Node from events that NOT having 'SubjectUserName' AND 'TargetUserName'.
@@ -561,10 +566,22 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "WHERE NOT EXISTS(e.SubjectUserName) AND NOT EXISTS(e.TargetUserName) "
                 "WITH collect(e.targetUser) as TargetUserNames,e "
                 "UNWIND TargetUserNames AS TargetUserName "
-                "FOREACH(p in TargetUserName | MERGE (t:TargetUser {name:p,EventRecordIDs: [ ],remoteHost:e.remoteHost,targetServer:e.targetServer})) "
+                "FOREACH(p in TargetUserName | MERGE (t:TargetUser {name:p,EventRecordIDs: [ ],remoteHost:e.remoteHost,targetServer:e.targetServer}) "
+                "SET t.IsCreated='true' "
+                "SET t.CreatedByEventRecordID=e.EventRecordID) "
             )
 
-             
+            # Create 'TargetUser' node where SubjectUserName and TargetUserName tags exists.
+            createTargetUsers3=session.run(
+                "MATCH (e:Event) "
+                "WHERE EXISTS(e.SubjectUserName) AND EXISTS(e.TargetUserName) "
+                "WITH collect(e.TargetUserName) as TargetUserNames,e "
+                "UNWIND TargetUserNames as TargetUserName "
+                "FOREACH(p in TargetUserName | MERGE (t:TargetUser {name:p,SubjectUsernames: [ ],EventRecordIDs: [ ],bindSubjectUserSids: [ ],remoteHost:e.remoteHost,targetServer:e.targetServer}) "
+                "SET t.IsCreated='true' "
+                "SET t.CreatedByEventRecordID=e.EventRecordID) "
+            )
+
             # Create 'SubjectUser' Node - Initialization
             createSubjectUsers=session.run(
                 "MATCH (e:Event) "
@@ -572,8 +589,25 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "WITH collect(e.SubjectUserName) as SubjectUserNames,e "
                 "UNWIND SubjectUserNames as SubjectUserName "
                 "FOREACH(p in SubjectUserName | MERGE (s:SubjectUser {name:p,TargetUsernames: [ ],EventRecordIDs: [ ],bindTargetUserSids: [ ],IsSubjectUser:'true',remoteHost:e.remoteHost,targetServer:e.targetServer,hasTargetUsernameTag:'true',hasSubjectUsernameTag:'true'}) "
-                "SET s.IsCreated='true') "
-                )
+                "SET s.IsCreated='true' "
+                "SET s.CreatedByEventRecordID=e.EventRecordID) "
+            )
+            
+            deleteDublicatesTargetUsers=session.run(
+                "MATCH (p:TargetUser) "
+                "WITH p.CreatedByEventRecordID as id, collect(p) AS nodes "
+                "WHERE size(id) >  1 "
+                "UNWIND nodes[1..] AS n "
+                "DETACH DELETE n "
+            )
+
+            '''deleteDublicatesTargetUsers=session.run(
+                "MATCH (s:SubjectUsers) "
+                "WITH s.CreatedByEventRecordID as id, collect(s) AS nodes "
+                "WHERE size(id) >  1 "
+                "UNWIND nodes[1..] AS n "
+                "DETACH DELETE n "
+            )'''
             
             # Update 'SubjectUser' node.
             UpdateSubjectUsers = session.run(
@@ -633,7 +667,7 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "FOREACH (p in targetUserName | MERGE (c:TargetUser {name:p}) "
                 "SET c.hasSubjectUser='false' "
                 "SET (CASE WHEN NOT e.EventRecordID IN c.EventRecordIDs THEN c END).EventRecordIDs=c.EventRecordIDs+e.EventRecordID)"
-                )
+            )
 
         with neo4jDriver.session() as session:
             # Check if Event node has the 'SubjectUserName'. If yes, then the relationship is:
