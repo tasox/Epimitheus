@@ -137,8 +137,11 @@ def eventParser(eventIDs,xmlDoc):
                         elif dict['Attrs'] and dict['Tags'] != 'Data' and dict['Tags'] != 'Execution':
                             #print ("[+]%s:%s" %(dict['Tags'],dict['Value'])) #[OK]
                             for key,value in dict['Attrs']:
-                                    tags=key
-                                    values=value
+                                    if key and value: # Check if tag has attribute with the corresponding value. Discrard the NULL.
+                                        tags=key
+                                        values=value
+                                    elif not value:
+                                        break
 
                         
                         elif dict['Attrs'] and dict['Tags'] == 'Data':
@@ -1042,9 +1045,9 @@ if __name__ == '__main__':
                     print("\n")
 
                     # Remove temp files
-                    os.remove(outXMLFile)
-                    os.remove(evtx2xml)
-                    os.remove(file) 
+                    #os.remove(outXMLFile)
+                    #os.remove(evtx2xml)
+                    #os.remove(file) 
                 
                 elif file.endswith('.xml'):
                     
