@@ -92,7 +92,8 @@ def eventParser(eventIDs,xmlDoc):
             
             for x in p.childNodes:
                 for y in x.childNodes:
-            
+                    tags=""
+                    values=""
                     try:
                         if not y.firstChild:
                             tag=y.nodeName
@@ -122,11 +123,23 @@ def eventParser(eventIDs,xmlDoc):
                             tags = dict['Tags']
                             values = dict['Value']
 
-                        elif dict['Attrs'] and dict['Tags'] != 'Data':
+                        elif dict['Attrs'] and dict['Tags'] == 'Execution': # Then has 2 properties: ThreadID, ProcessID
+                            #print("[+]%s:%s" % (key,value))
+                            tags = dict['Tags']
+                            dictExecution={}
+                            for attrKey,attrValue in dict['Attrs']:
+                                attrKey=attrKey
+                                attrValue=attrValue
+                                dictExecution.update({attrKey:attrValue})
+                            
+                            values=dictExecution # Set ProcessID and ThreadID in Dict format.
+
+                        elif dict['Attrs'] and dict['Tags'] != 'Data' and dict['Tags'] != 'Execution':
+                            #print ("[+]%s:%s" %(dict['Tags'],dict['Value'])) #[OK]
                             for key,value in dict['Attrs']:
-                                #print("[+]%s:%s" % (key,value))
-                                tags = key
-                                values = value
+                                    tags=key
+                                    values=value
+
                         
                         elif dict['Attrs'] and dict['Tags'] == 'Data':
                             #print("[+]%s:%s" % (key,value))
@@ -135,24 +148,10 @@ def eventParser(eventIDs,xmlDoc):
                                 attrValue=attrValue
                             value = dict['Value']
                             values = {attrValue:value}
-
-                        '''for key,value in dict['Attrs']:
-                            if dict['Tags'] != 'Data':
-                                #print("[+]%s:%s" % (key,value))
-                                #print ("[+]%s:%s" %(dict['Tags'],dict['Attrs']))
-                                key = key
-                                value = value
-                                
-                            elif dict['Tags'] == 'Data':
-                                #print("[+]%s:%s" % (value, dict['Value']))
-                                #key = value
-                                #value = dict['Value']
-                                
-                                ####dict4["Data"]={value:dict['Value']}
-                                ###key2=dict.get('Tags')
-                                value2={value:dict['Value']}'''
-                            
+                        
+                        #print("[+] %s : %s" % (tags,values))    
                                                
+                        #dict2=dict5
                         dict2={tags:values}
                         #print(dict2)
                                                 
@@ -219,18 +218,31 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
             for eventValue in value: # Value holds the Event data, Keys and Values in Dict format {'EventID':'4624'}
                 #https://stackoverflow.com/questions/54488095/python-3-dictionary-key-to-a-string-and-value-to-another-string
                 key, value = list(eventValue.items())[0]
+                
+                # Add ProcessID and ThreadID from the Execution tag.
+                if key == "Execution":
+                    for k,v in value.items():
+                        t.update({k:v})
+
+                
                 # Unpack the 'Data' part of Event and update the 'Event' node.
                 if key == "Data":
                     t.update(value)
                 
+                ##-----------------------Enabled if you like------------------------------##
                 #if <Data> tag exists dictionary of the Event then append the inside
-                if "Data" in t:
-                    t["Data"].append(value)
+                
+                ##if "Data" in t:
+                    ##t["Data"].append(value)
+                
                 #If <Data> tag non-exist on the dict then created but in this format
                 #e.g. {'Name':'PowerShell','Data':['log1','log2' etc.]}
-                elif key == "Data":
-                    t["Data"]=[]
-                    t["Data"].append(value)
+                
+                ##elif key == "Data":
+                ##    t["Data"]=[]
+                ##    t["Data"].append(value)
+
+                ##---------------------------------END--------------------------------------##
                    
                 #Otherwise, just update the dictionary
                 else:   
@@ -510,7 +522,45 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
         print(e)
         sys.exit(1)
 
-    blackListedEventProperties=["Opcode","Keywords","Version","Level","TransmittedServices","KeyLength","LmPackageName","Key Length","Message","SubjectDomainName","Guid","Provider","VirtualAccount","TicketEncryptionType","TicketOptions","Keywords","Level","KeyLength","CertIssuerName","CertSerialNumber","CertThumbprint","Channel","ObjectServer","PreAuth Type","TargetOutboundDomainName","FWLink","Unused","Unused2","Unused3","Unused4","Unused5","Unused6","OriginID","OriginName","ErrorCode","TypeID","TypeName","StatusDescription","AdditionalActionsID","SubStatus","Product"]
+    blackListedEventProperties=[
+        "Opcode",
+        "Keywords",
+        "Version",
+        "Level",
+        "TransmittedServices",
+        "KeyLength",
+        "LmPackageName",
+        "Key Length",
+        "Message",
+        "SubjectDomainName",
+        "TicketEncryptionType",
+        "TicketOptions",
+        "Keywords",
+        "Level",
+        "KeyLength",
+        "CertIssuerName",
+        "CertSerialNumber",
+        "CertThumbprint",
+        "ObjectServer",
+        "PreAuth Type",
+        "TargetOutboundDomainName",
+        "FWLink",
+        "Unused",
+        "Unused2",
+        "Unused3",
+        "Unused4",
+        "Unused5",
+        "Unused6",
+        "OriginID",
+        "OriginName",
+        "ErrorCode",
+        "TypeID",
+        "TypeName",
+        "StatusDescription",
+        "AdditionalActionsID",
+        "SubStatus",
+        "Product"
+        ]
 
     counter=0
     groupEvents=[] #Example [{ EventId: "4624",targetUser:"tasos"},{EventId: "4625", targetUser: "tzonis"}]
