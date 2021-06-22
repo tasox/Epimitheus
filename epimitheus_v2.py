@@ -137,11 +137,14 @@ def eventParser(eventIDs,xmlDoc):
                         elif dict['Attrs'] and dict['Tags'] != 'Data' and dict['Tags'] != 'Execution':
                             #print ("[+]%s:%s" %(dict['Tags'],dict['Value'])) #[OK]
                             for key,value in dict['Attrs']:
-                                    if key and value: # Check if tag has attribute with the corresponding value. Discrard the NULL.
-                                        tags=key
-                                        values=value
-                                    elif not value:
-                                        break
+                                #print ("[+]%s:%s" %(key,value)) #[OK]
+                                if value:
+                                    tags=key
+                                    values=value
+                                else:
+                                    tags="ActivityID"
+                            
+                           
 
                         
                         elif dict['Attrs'] and dict['Tags'] == 'Data':
