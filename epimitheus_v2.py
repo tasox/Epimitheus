@@ -144,8 +144,6 @@ def eventParser(eventIDs,xmlDoc):
                                 else:
                                     tags="ActivityID"
                             
-                           
-
                         
                         elif dict['Attrs'] and dict['Tags'] == 'Data':
                             #print("[+]%s:%s" % (key,value))
@@ -235,7 +233,6 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                 if key == "Data":
                     t.update(value)
                 
-                ##-----------------------Enabled if you like------------------------------##
                 #if <Data> tag exists dictionary of the Event then append the inside
                 
                 ##if "Data" in t:
@@ -248,7 +245,6 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                 ##    t["Data"]=[]
                 ##    t["Data"].append(value)
 
-                ##---------------------------------END--------------------------------------##
                    
                 #Otherwise, just update the dictionary
                 else:   
@@ -328,7 +324,7 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
 
             ##################################END - MESSAGE TAG###################################################################
             
-            if (t.get("EventID") not in ["4100","4103","4104","400","403","500","501","600","800"] and not "PowerShell" in t.get("Channel")): # Not In Powershell Events
+            if (t.get("EventID") not in ["4100","4103","4104","400","403","500","501","600","800"] and not "powershell" in t.get("Channel")): # Not In Powershell Events
                 
                 
                 try:
@@ -353,7 +349,7 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                 t.update({'targetUser':targetUser})
             
             # PowerShell logging cheatsheet: https://static1.squarespace.com/static/552092d5e4b0661088167e5c/t/5760096ecf80a129e0b17634/1465911664070/Windows+PowerShell+Logging+Cheat+Sheet+ver+June+2016+v2.pdf
-            elif t.get("EventID") in ["4100","4103","4104","400","403","500","501","600","800"]:
+            elif t.get("EventID") in ["4100","4103","4104","400","403","500","501","600","800"] or "powershell" in t.get("Channel"):
                 
                 eventData = t.get("Data")
 
@@ -1021,36 +1017,39 @@ if __name__ == '__main__':
                     
                     # Create an XML file with the same name as EVTX
                     evtx2xml = str(file).replace(".evtx", ".xml")
+                    print("[+] I'm fixing the fualty chars, I need sometime for that ...")
                     f = open(evtx2xml, "w")
                     f.write("<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\"?>")
                     f.write("\n")
                     f.write("<Events>")
                     for x in evtxDoc:
-                        f.write(x)
+                        #discard the unicode chars
+                        if re.findall('&#\d+;',str(x)): 
+                            f.write(re.sub(r'&#\d+;',r'',x))
+                        else:
+                            f.write(x) 
                     f.write("</Events>")    
                     f.close()
                     
-                    print("[+] I'm fixing the fualty chars, I need sometime for that ...")
-
                     #Fix Unicode chars
-                    readevtx2xml=open(evtx2xml,"r",encoding="utf-8")
-                    fixChars=re.sub(r'&#\d+;',r'',readevtx2xml.read())
-                    fixChars=unicodedata.normalize("NFKD", fixChars).encode('WINDOWS-1252', 'ignore').decode('UTF-8')
-                    readevtx2xml.close()
+                    #readevtx2xml=open(evtx2xml,"r",encoding="utf-8")
+                    #fixChars=re.sub(r'&#\d+;',r'',readevtx2xml.read())
+                    #fixChars=unicodedata.normalize("NFKD", fixChars).encode('WINDOWS-1252', 'ignore').decode('UTF-8')
+                    #readevtx2xml.close()
 
-                    file=file.replace(".evtx","_fixed.xml")
-                    openXMLwrite=open(file,"w")
-                    openXMLwrite.write(fixChars)
-                    openXMLwrite.close()
+                    #file=file.replace(".evtx","_fixed.xml")
+                    #openXMLwrite=open(file,"w")
+                    #openXMLwrite.write(fixChars)
+                    #openXMLwrite.close()
 
-                    rootDoc = minidom.parse(file).documentElement
-                    parsingFunction(file,rootDoc,outXMLFile)
+                    rootDoc = minidom.parse(evtx2xml).documentElement
+                    parsingFunction(evtx2xml,rootDoc,outXMLFile)
                     print("\n")
 
                     # Remove temp files
                     os.remove(outXMLFile)
                     os.remove(evtx2xml)
-                    os.remove(file) 
+                    #os.remove(file) 
                 
                 elif file.endswith('.xml'):
                     
