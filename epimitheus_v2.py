@@ -1048,9 +1048,9 @@ if __name__ == '__main__':
                     print("\n")
 
                     # Remove temp files
-                    #os.remove(outXMLFile)
-                    #os.remove(evtx2xml)
-                    #os.remove(file) 
+                    os.remove(outXMLFile)
+                    os.remove(evtx2xml)
+                    os.remove(file) 
                 
                 elif file.endswith('.xml'):
                     
