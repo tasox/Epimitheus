@@ -939,38 +939,30 @@ if __name__ == '__main__':
                         # Create an XML file with the same name as EVTX
                         #evtx2xml = str(file).replace(".evtx", ".xml")
                         evtx2xml = str(fileFullPath).replace(".evtx", ".xml")
+                        print("[+] I'm fixing the fualty chars, I need sometime for that ...")
                         f = open(evtx2xml, "w")
                         f.write("<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\"?>")
                         f.write("\n")
                         f.write("<Events>")
                         for x in evtxDoc:
-                            f.write(x)
+                            #discard the unicode chars
+                            if re.findall('&#\d+;',str(x)): 
+                                f.write(re.sub(r'&#\d+;',r'',x))
+                            else:
+                                f.write(x) 
                         f.write("</Events>")    
                         f.close()
                         rootDoc = minidom.parse(evtx2xml).documentElement
                         print("\n")
-                        
-                        print("[+] I'm fixing the fualty chars, I need sometime for that ...")
 
-                        #Fix Unicode chars
-                        readevtx2xml=open(evtx2xml,"r",encoding="utf-8")
-                        fixChars=re.sub(r'&#\d+;',r'',readevtx2xml.read())
-                        fixChars=unicodedata.normalize("NFKD", fixChars).encode('WINDOWS-1252', 'ignore').decode('utf-8')
-                        readevtx2xml.close()
-
-                        file=file.replace(".evtx","_fixed.xml")
-                        openXMLwrite=open(file,"w")
-                        openXMLwrite.write(fixChars)
-                        openXMLwrite.close()
-
-                        rootDoc = minidom.parse(file).documentElement
-                        parsingFunction(file,rootDoc,outXMLFile)
+                        rootDoc = minidom.parse(evtx2xml).documentElement
+                        parsingFunction(evtx2xml,rootDoc,outXMLFile)
                         print("\n")
 
                         # Remove temp files
                         os.remove(outXMLFile)
                         os.remove(evtx2xml)
-                        os.remove(file)
+                        #os.remove(file)
 
                     if os.path.isfile(fileFullPath) and file.endswith('.xml') and not file.endswith('_fixed.xml'):
                         #Get the file which all the events will be imported befored moved to neo4j.
@@ -1031,17 +1023,6 @@ if __name__ == '__main__':
                     f.write("</Events>")    
                     f.close()
                     
-                    #Fix Unicode chars
-                    #readevtx2xml=open(evtx2xml,"r",encoding="utf-8")
-                    #fixChars=re.sub(r'&#\d+;',r'',readevtx2xml.read())
-                    #fixChars=unicodedata.normalize("NFKD", fixChars).encode('WINDOWS-1252', 'ignore').decode('UTF-8')
-                    #readevtx2xml.close()
-
-                    #file=file.replace(".evtx","_fixed.xml")
-                    #openXMLwrite=open(file,"w")
-                    #openXMLwrite.write(fixChars)
-                    #openXMLwrite.close()
-
                     rootDoc = minidom.parse(evtx2xml).documentElement
                     parsingFunction(evtx2xml,rootDoc,outXMLFile)
                     print("\n")
