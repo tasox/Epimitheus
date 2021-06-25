@@ -153,6 +153,14 @@ def eventParser(eventIDs,xmlDoc):
                             value = dict['Value']
                             values = {attrValue:value}
                         
+                        # Some events don't have attributes on the tag 'DATA'
+                        elif not dict['Attrs'] and dict['Tags'] == 'Data':
+                            #print ("[+]%s:%s" %(dict['Tags'],dict['Value'])) #[OK]
+                            tags = dict['Tags'] #<Data>
+                            attrValue='ContextInfo' # <Data Name="<attrValue>" />
+                            value = dict['Value']  # <Data Name="<attrValue>" /> <value> </Data>
+                            values = {attrValue:value}
+
                         #print("[+] %s : %s" % (tags,values))    
                                                
                         #dict2=dict5
@@ -222,7 +230,7 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
             for eventValue in value: # Value holds the Event data, Keys and Values in Dict format {'EventID':'4624'}
                 #https://stackoverflow.com/questions/54488095/python-3-dictionary-key-to-a-string-and-value-to-another-string
                 key, value = list(eventValue.items())[0]
-                
+                #print(value)
                 # Add ProcessID and ThreadID from the Execution tag.
                 if key == "Execution":
                     for k,v in value.items():
@@ -235,15 +243,15 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                 
                 #if <Data> tag exists dictionary of the Event then append the inside
                 
-                ##if "Data" in t:
-                    ##t["Data"].append(value)
+                if "Data" in t:
+                    t["Data"].append(value)
                 
                 #If <Data> tag non-exist on the dict then created but in this format
                 #e.g. {'Name':'PowerShell','Data':['log1','log2' etc.]}
                 
-                ##elif key == "Data":
-                ##    t["Data"]=[]
-                ##    t["Data"].append(value)
+                elif key == "Data":
+                    t["Data"]=[]
+                    t["Data"].append(value)
 
                    
                 #Otherwise, just update the dictionary
@@ -298,7 +306,7 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
             ###############################MESSAGE TAG###########################################################
             #Get values from the following keys inside from <Message> tag.
             #Error Code, Impersonation Level, Restricted Admin Mode, Virtual Account, Elevated Token
-            if t.get("Message"):
+            '''if t.get("Message"):
                 f = t.get("Message")
                 if (re.findall('Error Code:',f)):
                     ErrorCode = re.findall('Error Code:\s+[\w+-]*',f)[0].split(":")[1].strip()
@@ -318,7 +326,7 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
 
                 if (re.findall('Elevated Token:',f)):
                     ElevatedToken = re.findall('Elevated Token:\s+[\w+-]*',f)[0].split(":")[1].strip()
-                    t.update({'ElevatedToken':ElevatedToken})
+                    t.update({'ElevatedToken':ElevatedToken})'''
             #else:
             #	print("[-] Couldn't find <Message> tag on Event ID %s with EventRecordID %s." % (t.get("EventID"),t.get("EventRecordID")))
 
@@ -351,114 +359,133 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
             # PowerShell logging cheatsheet: https://static1.squarespace.com/static/552092d5e4b0661088167e5c/t/5760096ecf80a129e0b17634/1465911664070/Windows+PowerShell+Logging+Cheat+Sheet+ver+June+2016+v2.pdf
             elif t.get("EventID") in ["4100","4103","4104","400","403","500","501","600","800"] or "powershell" in t.get("Channel"):
                 
-                eventData = t.get("Data")
+                if t.get("Data"):
+                    eventData = t.get("Data")
 
-                #matchUsers = ["User=","User = ","UserId=","UserId =","UserID=","UserID ="]
-                matchHostApplication = ["Host Application","HostApplication"]
 
                 try:
 
                     #Check if the word "User=" or "UserId=" etc. exists inside the <Data> tag
                     # Before search unpack the Event data which are List format.
-                    for eventX in eventData:
+                    for eventX in eventData:                            
+                        #print(eventX)
+                        if eventX != None:
 
-                        try:
+                            try:    
+                                # Try find usernames on Description part of the Event e.g 4103,4104,800 
+                                if eventX.get("ContextInfo"): # any(x in str(eventX) for x in matchUsers):
+                                    # Find the "UserId, User or UserId" string inside the 'ContextInfo'property of an Event. If "exists" then catch the Username
+                                    targetUser = re.findall('Use[rId|rID|r]+.=.[a-zA-Z0-9]+.\w+.',str(eventX.get("ContextInfo")))
+                                    # Convert List results -> String e.g ['AD\Administrator'] -> 'AD\Administrator'
+                                    targetUser = ' '.join(targetUser)
+                                    #if exists then split the string and get the value after "=" e.g UserId=15241 grab the 15241
+                                    targetUser = targetUser.split("=")[1].strip()
 
-                            # Try find usernames on Description part of the Event e.g 4103,4104,800 
-                            if eventX.get("ContextInfo"): # any(x in str(eventX) for x in matchUsers):
-                                # Find the "UserId, User or UserId" string inside the 'ContextInfo'property of an Event. If "exists" then catch the Username
-                                targetUser = re.findall('Use[rId|rID|r].*=.[\a-zA-Z0-9]+',eventX.get("ContextInfo"))
-                                # Convert List results -> String e.g ['AD\Administrator'] -> 'AD\Administrator'
-                                targetUser = ' '.join(targetUser)
-                                #if exists then split the string and get the value after "=" e.g UserId=15241 grab the 15241
-                                targetUser = targetUser.split("=")[1].strip().split(" ")[0].strip()
+                                    try:
+                                        if targetUser in bListedUsers:
+                                            print("[-] Event ID %s with Record ID %s discarded because the TargetUser %s is into the bListedUsers list." % (t.get("EventID"),t.get("EventRecordID"),targetUser))
+                                            break
+                                        else:
+                                            t.update({'targetUser':targetUser})
 
-                                try:
-                                    if targetUser in bListedUsers:
-                                        print("[-] Event ID %s with Record ID %s discarded because the TargetUser %s is into the bListedUsers list." % (t.get("EventID"),t.get("EventRecordID"),targetUser))
-                                        break
-                                    else:
-                                        t.update({'targetUser':targetUser})
+                                    except Exception as error:
+                                        print(error)
 
-                                except Exception as error:
-                                    print(error)
-
-                            elif not t.get("targetUser") and t.get("UserID"):
-                                targetUser=t.get("UserID")
-                                t.update({'targetUser':targetUser})
-                            
-                            else:
-                                #Some PowerShell events doesn't have the UserId property.
-                                #In this case, use a generic user, which is called `PSGenericUser` 
-                                #Check if targeUser key hasn't already set.
-                                if not t.get("targetUser"):
-                                    targetUser = "PSGenericUser"
+                                elif not t.get("targetUser") and t.get("UserID"):
+                                    targetUser=t.get("UserID")
                                     t.update({'targetUser':targetUser})
-
-                        except Exception as error:
-                            print(error)
-                             
-                        try:        
-                            if any(x in str(eventX) for x in matchHostApplication):
-                                if re.findall('HostApplication.*=',str(eventX)):    
-                                    HostApplication = re.findall('HostApplication.*=.[\a-zA-Z0-9]+Engine Version',str(eventX))
+                                
                                 else:
-                                    HostApplication = re.findall('Host Application.*=.[\a-zA-Z0-9]+Engine Version',str(eventX))
-                                HostApplication = ' '.join(HostApplication)
-                                HostApplication = HostApplication.replace("Engine Version","").strip()
-                                HostApplication = HostApplication.split("=")[1].strip()
-                                t.update({'HostApplication':HostApplication})
-                        
-                        except Exception as error:    
-                            print("[-] HostApplication RegEx error!")
-                            print(error)
-                        
-                        try:
-                            if(re.findall('ScriptName.*=',str(eventX))):
-                                ScriptName = re.findall('ScriptName.*=.*\w+.*',str(eventX))
-                                ScriptName = ' '.join(ScriptName)
-                                ScriptName = ScriptName.split("=")[1]
-                                t.update({'ScriptName':ScriptName})
-                                #print(ScriptName)
+                                    #Some PowerShell events doesn't have the UserId property.
+                                    #In this case, use a generic user, which is called `PSGenericUser` 
+                                    #Check if targeUser key hasn't already set.
+                                    if not t.get("targetUser"):
+                                        targetUser = "PSGenericUser"
+                                        t.update({'targetUser':targetUser})
+                            
+                            except Exception as error:
+                                print(error)
+                            
+
+                            try:
+                            
+                                if eventX.get("ContextInfo"):
+                                    if re.findall('HostApplication.*=.[\a-zA-Z0-9]+Engine',eventX.get("ContextInfo")):    
+                                        HostApplication = re.findall('HostApplication.*=.[\a-zA-Z0-9]+Engine',str(eventX.get("ContextInfo")))
+                                    else:
+                                        HostApplication = re.findall('Host Application.*=.[\a-zA-Z0-9]+Engine',str(eventX.get("ContextInfo")))
+                                    
+                                    if HostApplication:
+                                        HostApplication = ' '.join(HostApplication)
+                                        HostApplication = HostApplication.replace("Engine","").strip()
+                                        HostApplication = HostApplication.split("=")[1].strip()
+                                        t.update({'HostApplication':HostApplication})
+                            
+                            except Exception as error:    
+                                print("[-] HostApplication RegEx error! %s" % error)
+
+                            try:
+                                if eventX.get("ContextInfo"):
+                                    if re.findall('ScriptName.*=.[\a-zA-Z0-9]+Command',eventX.get("ContextInfo")):
+                                        ScriptName = re.findall('ScriptName.*=.[\a-zA-Z0-9]+Command',str(eventX.get("ContextInfo")))
+                                    else:
+                                        ScriptName = re.findall('Script Name.*=.[\a-zA-Z0-9]+Command',str(eventX.get("ContextInfo")))    
+                                    
+                                    if ScriptName:
+                                        ScriptName = ' '.join(ScriptName)
+                                        ScriptName = ScriptName.replace("Command","").strip()
+                                        ScriptName = ScriptName.split("=")[1].strip()
+                                        t.update({'ScriptName':ScriptName})
+                                    #print(ScriptName)
+                                    
+                            except Exception as error:     
+                                print("[-] ScriptName RegEx error! %s" % error)
+
+                            try:
+                                if eventX.get("ContextInfo"):
+                                    if re.findall('CommandLine.*=.[\a-zA-Z0-9]+',eventX.get("ContextInfo")):
+                                        CommandLine = re.findall('CommandLine.*=.[\a-zA-Z0-9]+',str(eventX.get("ContextInfo")))
+                                        CommandLine = ' '.join(CommandLine)
+                                        CommandLine = CommandLine.split("=")[1]
+                                        t.update({'CommandLine':CommandLine})
+                                        #print(CommandLine)
+                            except Exception as error:
+                                print("[-] commandLine RegEx error! %s" % error)
+
+                            try:    
+                                if eventX.get("ContextInfo"):
+                                    if re.findall('CommandPath.*=.[\a-zA-Z0-9]+Sequence',eventX.get("ContextInfo")):
+                                        CommandPath = re.findall('CommandPath.*=.[\a-zA-Z0-9]+Sequence',str(eventX.get("ContextInfo")))
+                                    else:
+                                        CommandPath = re.findall('Command Path.*=.[\a-zA-Z0-9]+Sequence',str(eventX.get("ContextInfo")))
+                                    
+                                    if CommandPath:
+                                        CommandPath = ' '.join(CommandPath)
+                                        CommandPath = CommandPath.replace("Sequence","").strip()
+                                        CommandPath = CommandPath.split("=")[1]
+                                        t.update({'CommandPath':CommandPath})
+                                    
+                            except Exception as error:
+                                print("[-] CommandPath RegEx error! %s" % error)
+
+                            try:
+                                if eventX:
+                                    contextInfo = re.findall('Severity.*=',str(eventX.get('ContextInfo')))
+                                    if contextInfo != None:
+                                        contextInfoSeverity = re.findall('Severity.*=.[a-zA-Z]+',str(contextInfo))
+                                        if contextInfoSeverity and contextInfoSeverity != None:
+                                            Severity = re.findall('Severity.*=.[a-zA-Z]+',str(contextInfo))
+                                            Severity = ' '.join(Severity)
+                                            Severity = Severity.split("=")[1].split(" ")[0]
+                                            t.update({'Severity':Severity})
+                                    else:
+                                        contextInfoSeverity=""    
+                                    
                                 
-                        except Exception as error:     
-                            print("[-] ScriptName RegEx error!")
-                            print(error)
-                        
-                        try:
-                            if(re.findall('CommandLine.*=',str(eventX))):
-                                CommandLine = re.findall('CommandLine.*=.*\w+.*',str(eventX))
-                                CommandLine = ' '.join(CommandLine)
-                                CommandLine = CommandLine.split("=")[1]
-                                t.update({'CommandLine':CommandLine})
-                                #print(CommandLine)
-                        except Exception as error:
-                            print("[-] commandLine RegEx error!")
-                            print(error)    
-                        
-                        try:    
-                            if(re.findall('CommandPath.*=',str(eventX))):
-                                CommandPath = re.findall('CommandPath.*=.*\w+.*',str(eventX))
-                                CommandPath = ' '.join(CommandPath)
-                                CommandPath = CommandPath.split("=")[1]
-                                t.update({'CommandPath':CommandPath})
-                                #print(CommandPath)
+                            
+                            except Exception as error:
+                                print("[-] Severity RegEx error! %s" % error)
                                 
-                        except Exception as error:
-                            print("[-] CommandPath RegEx error!")
-                            print(error)
-                        
-                        try:
-                            if(re.findall('Severity.*=',str(eventX))):
-                               Severity = re.findall('Severity.*=.[a-zA-Z]+',str(eventX))
-                               Severity = ' '.join(Severity)
-                               Severity = Severity.split("=")[1].split(" ")[0]
-                               t.update({'Severity':Severity})
-                               #print(Severity)
-                        
-                        except Exception as error:
-                            print("[-] Severity RegEx error!")
-                            print(error)
 
                     # print(t.get('EventRecordID')+"-->"+t.get('targetUser')) [OK]
                 
@@ -585,6 +612,10 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
         
         print("[+] Adding the Events ...")
         with neo4jDriver.session() as session:
+            print("\n")
+            print("=========Time Frame=========")
+            total_time = 0
+            start = time.time()
             # Create Neo4j Nodes
             insertEvents = session.run(
                 "UNWIND $events as eventPros "
@@ -592,14 +623,17 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 #OK#"MERGE (r:RemoteHosts {name:e.remoteHost,remoteHostname:e.remoteHostname}) "
                 #OK#"MERGE (t:TargetHost {name:e.targetServer}) ",events=groupEvents) 
                 
-                "MERGE (e:Event {EventRecordID:eventPros.EventRecordID}) SET e=eventPros " #Avoid dublicate Events with MERGE and filtering.
+                "CREATE (e:Event {EventRecordID:eventPros.EventRecordID}) SET e=eventPros "
+                #"MERGE (e:Event {EventRecordID:eventPros.EventRecordID}) SET e=eventPros " #Avoid dublicate Events with MERGE and filtering.
                 "MERGE (r:RemoteHosts {name:e.remoteHost,remoteHostname:e.remoteHostname}) "
                 "MERGE (t:TargetHost {name:e.targetServer}) ",events=groupEvents)
-                         
+            total_time += time.time() - start
+            print("[1] insertEvents query completed after: %f " %(total_time))             
 
-        print("[+] Event Correlation ...")
+        
         with neo4jDriver.session() as session:
-            
+            total_time = 0
+            start = time.time()
             # Create 'TargetUser' Node - Initialization 
             createTargetUsers=session.run(
                 "MATCH (e:Event) "
@@ -610,7 +644,12 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "SET t.IsCreated='true' "
                 "SET t.CreatedByEventRecordID=e.EventRecordID) "
                 )
-            
+            total_time += time.time() - start
+            print("[2] createTargetUsers query completed after: %f " %(total_time))    
+
+        with neo4jDriver.session() as session:    
+            total_time = 0
+            start = time.time()
             #Create 'TargetUser' Node from events that NOT having 'SubjectUserName' AND 'TargetUserName'.
             # e.g. Windows Event ID 1116, 1117 etc.
             createTargetUsers2=session.run(
@@ -622,7 +661,13 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "SET t.IsCreated='true' "
                 "SET t.CreatedByEventRecordID=e.EventRecordID) "
             )
+            total_time += time.time() - start
+            print("[3] createTargetUsers2 query completed after: %f " %(total_time))    
 
+
+        with neo4jDriver.session() as session:
+            total_time = 0
+            start = time.time()
             # Create 'TargetUser' node where SubjectUserName and TargetUserName tags exists.
             createTargetUsers3=session.run(
                 "MATCH (e:Event) "
@@ -633,7 +678,12 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "SET t.IsCreated='true' "
                 "SET t.CreatedByEventRecordID=e.EventRecordID) "
             )
+            total_time += time.time() - start
+            print("[4] createTargetUsers3 query completed after: %f " %(total_time)) 
 
+        with neo4jDriver.session() as session:
+            total_time = 0
+            start = time.time()
             # Create 'SubjectUser' Node - Initialization
             createSubjectUsers=session.run(
                 "MATCH (e:Event) "
@@ -644,7 +694,12 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "SET s.IsCreated='true' "
                 "SET s.CreatedByEventRecordID=e.EventRecordID) "
             )
-            
+            total_time += time.time() - start
+            print("[5] createSubjectUsers query completed after: %f " %(total_time)) 
+
+        with neo4jDriver.session() as session:
+            total_time = 0
+            start = time.time()
             deleteDublicatesTargetUsers=session.run(
                 "MATCH (p:TargetUser) "
                 "WITH p.CreatedByEventRecordID as id, collect(p) AS nodes "
@@ -652,15 +707,22 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "UNWIND nodes[1..] AS n "
                 "DETACH DELETE n "
             )
+            total_time += time.time() - start
+            print("[6] deleteDublicatesTargetUsers query completed after: %f " %(total_time)) 
 
-            '''deleteDublicatesTargetUsers=session.run(
+
+        '''with neo4jDriver.session() as session:
+            deleteDublicatesTargetUsers=session.run(
                 "MATCH (s:SubjectUsers) "
                 "WITH s.CreatedByEventRecordID as id, collect(s) AS nodes "
                 "WHERE size(id) >  1 "
                 "UNWIND nodes[1..] AS n "
                 "DETACH DELETE n "
             )'''
-            
+        
+        with neo4jDriver.session() as session:    
+            total_time = 0
+            start = time.time()
             # Update 'SubjectUser' node.
             UpdateSubjectUsers = session.run(
                 "MATCH (e:Event),(r:RemoteHosts),(t:TargetHost),(u:TargetUser),(s:SubjectUser) "
@@ -680,8 +742,13 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "SET (CASE WHEN NOT e.TargetUserName IN b.TargetUsernames THEN b END).TargetUsernames=b.TargetUsernames+e.TargetUserName "
                 "SET (CASE WHEN NOT e.TargetUserSid IN b.bindTargetUserSids THEN b END).bindTargetUserSids=b.bindTargetUserSids+e.TargetUserSid "
                 "SET b.SubjectUserRealName=e.SubjectUserName)")
+            
+            total_time += time.time() - start
+            print("[7] UpdateSubjectUsers query completed after: %f " %(total_time))
 
-                       
+        with neo4jDriver.session() as session:               
+            total_time = 0
+            start = time.time()
             ### Update 'TargetUsers(T)' that have SubjectUsers.
             updateTargetUserNode = session.run(
                 "MATCH (u:TargetUser),(e:Event),(r:RemoteHosts),(t:TargetHost) "
@@ -706,8 +773,14 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "SET b.hasSubjectUsernameTag='true' "
                 #"SET b.prodByEventRecordID=e.EventRecordID "
                 "SET (CASE WHEN NOT e.SubjectUserSid IN b.bindSubjectUserSids THEN b END).bindSubjectUserSids=b.bindSubjectUserSids+e.SubjectUserSid)")
-           
-           ### Update 'TargetUser' node BUT for users that DONT have SubjectUsers
+            
+            total_time += time.time() - start
+            print("[8] updateTargetUserNode query completed after %f: " %(total_time))
+
+        with neo4jDriver.session() as session:   
+            total_time = 0
+            start = time.time()
+            ### Update 'TargetUser' node BUT for users that DONT have SubjectUsers
             updateTargetUserNode2=session.run(
                 "MATCH (u:TargetUser),(e:Event) "
                 "WHERE u.name=e.targetUser "
@@ -720,8 +793,12 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "SET c.hasSubjectUser='false' "
                 "SET (CASE WHEN NOT e.EventRecordID IN c.EventRecordIDs THEN c END).EventRecordIDs=c.EventRecordIDs+e.EventRecordID)"
             )
+            total_time += time.time() - start
+            print("[9] updateTargetUserNode2 query completed after %f: " %(total_time))
 
         with neo4jDriver.session() as session:
+            total_time = 0
+            start = time.time()
             # Check if Event node has the 'SubjectUserName'. If yes, then the relationship is:
             # IsSubjectTarget = Means that Event contains 'SubjectUserName'  property but has the same value with 'targetUsername'
             # RemoteHost -> User -> TargetUser -> EventID -> targetServer
@@ -740,6 +817,12 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "MERGE (r)-[r1:RemoteHostTOSubjectUsername]-(s)-[r2:SubjectUsernameTOTargetuser]->(t)"
                 #"MERGE (r)-[r1:RemoteHostTOSubjectUsername]->(s)-[r2:SubjectUsernameTOTargetuser]-(t)-[r3:TargetUserTOEventID]-(e)-[r4:EventIDTOtargetHost]->(th)") #-[r3:TargetUserTOEventID]-(e)-[r4:EventIDTOtargetHost]->(th)
             )
+            total_time += time.time() - start
+            print("[10] SubjectUserTargetUserRelationship1 query completed after: %f " %(total_time))
+        
+        with neo4jDriver.session() as session:
+            total_time = 0
+            start = time.time()
             SubjectUserTargetUserRelationship2 = session.run(
                 "MATCH (t:TargetUser),(e:Event),(th:TargetHost) "
                 "WHERE t.IsSubjectUser='false' "
@@ -752,7 +835,12 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "MERGE (t)-[r3:TargetUserTOEvent]-(e)-[r4:EventIDTOtargetHost]->(th)"
 
             )
-           
+            total_time += time.time() - start
+            print("[11] SubjectUserTargetUserRelationship2 query completed after: %f " %(total_time))
+
+        with neo4jDriver.session() as session:   
+            total_time = 0
+            start = time.time()
             #allInOnerelationship = session.run("MATCH (t:TargetUser),(th:TargetHost),(e:Event) WHERE e.targetUser=t.TargetRealName AND t.targetServer=th.name AND e.targetServer=th.name MERGE (t)-[m1:test1]-(e)-[m2:test2]->(th)")
             #deleteDublicates_AllInOnerelationship = session.run("MATCH (r:RemoteHosts)-[r1]-(t:SubjectUser)-[r2]->(s:TargetUser) with r,t,s,type(r1) as typ, tail(collect(r1)) as coll foreach(x in coll | delete x)")
             # Create relationships only for Users that NOT contains 'SubjectUserName'
@@ -761,8 +849,13 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "WHERE u.remoteHost = r.name "
                 "AND u.hasSubjectUser='false' "
                 "MERGE (r)-[r5:Source2TargerUser]->(u)"
-                )
-            
+            )
+            total_time += time.time() - start
+            print("[12] remoteHost2DomUserRelationship query completed after: %f " %(total_time))
+
+        with neo4jDriver.session() as session:
+            total_time = 0
+            start = time.time()    
             targetUser2EventRelationship = session.run(
                 "MATCH (u:TargetUser),(e:Event),(t:TargetHost) "
                 "WHERE e.targetUser = u.name "
@@ -771,7 +864,10 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "AND e.EventRecordID IN u.EventRecordIDs "
                 "AND NOT EXISTS(u.hasSubjectUserNameTag) OR u.hasSubjectUsernameTag='false' "
                 "MERGE (u)-[r7:TargetUser2Event]-(e)-[r8:Event2TargetHost]->(t)"
-                )
+            )
+
+            total_time += time.time() - start
+            print("[13] targetUser2EventRelationship query completed after: %f " %(total_time))
 
 
             
@@ -779,7 +875,9 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
         print(e)
 
     #Close the connection with Neo4j
+    print("[+] All queries pushed to Neo4j successfully")
     neo4jDriver.close()
+    print("[+] Connection with Neo4j is closed.")
 
 
 def eventCounters(neo4jUri,neo4jUser,neo4jPass):
@@ -814,6 +912,14 @@ def eventCounters(neo4jUri,neo4jUser,neo4jPass):
     for x in k:
         print ("[+] Added TargetUsers:"+str(x.value()))
         countTargetUsers = int(x.value())
+    
+    #Count SubjectUsers
+    #with neo4jDriver.session() as session:
+    k=neo4jDriver.session().run("MATCH (n:SubjectUser) RETURN count(n)")
+    countTargetUsers = 0
+    for x in k:
+        print ("[+] Added SubjectUsers:"+str(x.value()))
+        countSubjectUsers = int(x.value())
 
     #Count Relatioships
     #with neo4jDriver.session() as session:
@@ -823,7 +929,7 @@ def eventCounters(neo4jUri,neo4jUser,neo4jPass):
         print ("[+] Added Relationships:"+str(x.value()))
         countRel = int(x.value())
 
-    print ("[+] Total: "+str(countEvents+countRemHosts+countRel+countTargetHosts+countTargetUsers))
+    print ("[+] Total: "+str(countEvents+countRemHosts+countRel+countTargetHosts+countTargetUsers+countSubjectUsers))
     print ('[+] Finished: {:%d-%m-%Y %H:%M:%S}'.format(datetime.datetime.now()))
 
     #Close the connection with Neo4j
