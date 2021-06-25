@@ -357,7 +357,7 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                 t.update({'targetUser':targetUser})
             
             # PowerShell logging cheatsheet: https://static1.squarespace.com/static/552092d5e4b0661088167e5c/t/5760096ecf80a129e0b17634/1465911664070/Windows+PowerShell+Logging+Cheat+Sheet+ver+June+2016+v2.pdf
-            elif t.get("EventID") in ["4100","4103","4104","400","403","500","501","600","800"] or "powershell" in t.get("Channel"):
+            elif t.get("EventID") in ["4100","4103","4104","400","403","500","501","600","800"]:
                 
                 if t.get("Data"):
                     eventData = t.get("Data")
@@ -370,41 +370,38 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                     for eventX in eventData:                            
                         #print(eventX)
                         if eventX != None:
-
                             try:    
                                 # Try find usernames on Description part of the Event e.g 4103,4104,800 
                                 if eventX.get("ContextInfo"): # any(x in str(eventX) for x in matchUsers):
-                                    # Find the "UserId, User or UserId" string inside the 'ContextInfo'property of an Event. If "exists" then catch the Username
-                                    targetUser = re.findall('Use[rId|rID|r]+.=.[a-zA-Z0-9]+.\w+.',str(eventX.get("ContextInfo")))
-                                    # Convert List results -> String e.g ['AD\Administrator'] -> 'AD\Administrator'
-                                    targetUser = ' '.join(targetUser)
-                                    #if exists then split the string and get the value after "=" e.g UserId=15241 grab the 15241
-                                    targetUser = targetUser.split("=")[1].strip()
+                                    if re.findall('Use[rId|rID|r]+.=.[a-zA-Z0-9]+.\w+.',str(eventX.get("ContextInfo"))):
+                                        targetUser = re.findall('Use[rId|rID|r]+.=.[a-zA-Z0-9]+.\w+.',str(eventX.get("ContextInfo")))
+                                        targetUser = ' '.join(targetUser)
+                                        targetUser = targetUser.split("=")[1].strip()
+                                    
+                                    elif not t.get("targetUser") and t.get("UserID"):
+                                        targetUser=t.get("UserID")
+                                        #t.update({'targetUser':targetUser})
 
-                                    try:
-                                        if targetUser in bListedUsers:
-                                            print("[-] Event ID %s with Record ID %s discarded because the TargetUser %s is into the bListedUsers list." % (t.get("EventID"),t.get("EventRecordID"),targetUser))
-                                            break
-                                        else:
-                                            t.update({'targetUser':targetUser})
+                                    elif not t.get("targetUser") and t.get("UserID"):
+                                        targetUser=t.get("UserID")
+                                        #t.update({'targetUser':targetUser})
 
-                                    except Exception as error:
-                                        print(error)
-
-                                elif not t.get("targetUser") and t.get("UserID"):
-                                    targetUser=t.get("UserID")
-                                    t.update({'targetUser':targetUser})
-                                
-                                else:
-                                    #Some PowerShell events doesn't have the UserId property.
-                                    #In this case, use a generic user, which is called `PSGenericUser` 
-                                    #Check if targeUser key hasn't already set.
-                                    if not t.get("targetUser"):
+                                    elif not t.get("targetUser"):
+                                        #Some PowerShell events doesn't have the UserId property.
+                                        #In this case, use a generic user, which is called `PSGenericUser` 
+                                        #Check if targeUser key hasn't already set.
                                         targetUser = "PSGenericUser"
-                                        t.update({'targetUser':targetUser})
+                                        #t.update({'targetUser':targetUser})
+
+                                if targetUser in bListedUsers:
+                                    print("[-] Event ID %s with Record ID %s discarded because the TargetUser %s is into the bListedUsers list." % (t.get("EventID"),t.get("EventRecordID"),targetUser))
+                                    break
+                                else:
+                                    t.update({'targetUser':targetUser})
+
                             
                             except Exception as error:
-                                print(error)
+                                print("[-] TargetUser RegEx error! %s" % error)
                             
 
                             try:
@@ -1045,7 +1042,9 @@ if __name__ == '__main__':
                         # Create an XML file with the same name as EVTX
                         #evtx2xml = str(file).replace(".evtx", ".xml")
                         evtx2xml = str(fileFullPath).replace(".evtx", ".xml")
+                        print ('[+] Started: {:%d-%m-%Y %H:%M:%S}'.format(datetime.datetime.now()))
                         print("[+] I'm fixing the fualty chars, I need sometime for that ...")
+                        print("\n")
                         f = open(evtx2xml, "w")
                         f.write("<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\"?>")
                         f.write("\n")
@@ -1115,7 +1114,9 @@ if __name__ == '__main__':
                     
                     # Create an XML file with the same name as EVTX
                     evtx2xml = str(file).replace(".evtx", ".xml")
+                    print ('[+] Started: {:%d-%m-%Y %H:%M:%S}'.format(datetime.datetime.now()))
                     print("[+] I'm fixing the fualty chars, I need sometime for that ...")
+                    print("\n")
                     f = open(evtx2xml, "w")
                     f.write("<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\"?>")
                     f.write("\n")
