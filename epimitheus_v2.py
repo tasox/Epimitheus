@@ -266,33 +266,33 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                 if t.get("IpAddress") and (t.get("IpAddress") in lhostIPs):
                     if t.get("Workstation") and (t.get("Workstation") not in lhostIPs):
                         remoteHost = t.get("Workstation")
-                        t.update({'remoteHost':regExIP(remoteHost)})
+                        t.update({'remoteHost':regExIP(remoteHost.lower())})
                     elif t.get("Computer") and (t.get("Computer") not in lhostIPs):
                         remoteHost = t.get("Computer")
-                        t.update({'remoteHost':regExIP(remoteHost)})
+                        t.update({'remoteHost':regExIP(remoteHost.lower())})
                     else:
                         print("[-] Event ID %s with Record ID %s does not have a remoteHost." % (t.get("EventID"),t.get("EventRecordID")))
 
                 elif t.get("IpAddress") : #and (t.get("IpAddress") not in lhostIPs)
                     remoteHost = t.get("IpAddress")
-                    t.update({'remoteHost':regExIP(remoteHost)})
+                    t.update({'remoteHost':regExIP(remoteHost.lower())})
                     
 
                 #if Sysmon File is provided, then "SourceIp" is the correct tag.
                 elif t.get("SourceIp") and (t.get("SourceIp") not in lhostIPs):
                     remoteHost = t.get("SourceIp")
-                    t.update({'remoteHost':regExIP(remoteHost)})
+                    t.update({'remoteHost':regExIP(remoteHost.lower())})
                    
 
                 else:
                     remoteHost = t.get("Computer") #t.get("IpAddress")
-                    t.update({'remoteHost':regExIP(remoteHost)})
+                    t.update({'remoteHost':regExIP(remoteHost.lower())})
                                 
                 if t.get("SourceHostname"):
                     remoteSourceHostname = t.get("SourceHostname")
-                    t.update({'remoteHostname':remoteSourceHostname})
+                    t.update({'remoteHostname':remoteSourceHostname.lower()})
                 else:
-                    t.update({'remoteHostname':regExIP(remoteHost)})
+                    t.update({'remoteHostname':regExIP(remoteHost.lower())})
 
             except TypeError as te:
                 print("[!] Something went wrong to `remoteHost` clause.")
@@ -332,7 +332,7 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
 
             ##################################END - MESSAGE TAG###################################################################
             
-            if (t.get("EventID") not in ["4100","4103","4104","400","403","500","501","600","800"] and not "powershell" in t.get("Channel")): # Not In Powershell Events
+            if (t.get("EventID") not in ["4100","4103","4104","400","403","500","501","600","800"] or not "powershell" in t.get("Channel")): # Not In Powershell Events
                 
                 
                 try:
@@ -354,8 +354,12 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                     print(te)
                 
                 # If everything goes well then Update/Add the targetUser property to the Event.
-                t.update({'targetUser':targetUser})
-            
+                if targetUser not in bListedUsers:
+                    t.update({'targetUser':targetUser})
+                else:
+                    print("[-] Event ID %s with Record ID %s discarded because the TargetUser %s is into the bListedUsers list." % (t.get("EventID"),t.get("EventRecordID"),targetUser))
+                    break
+
             # PowerShell logging cheatsheet: https://static1.squarespace.com/static/552092d5e4b0661088167e5c/t/5760096ecf80a129e0b17634/1465911664070/Windows+PowerShell+Logging+Cheat+Sheet+ver+June+2016+v2.pdf
             elif t.get("EventID") in ["4100","4103","4104","400","403","500","501","600","800"]:
                 
@@ -374,19 +378,16 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                                 # Try find usernames on Description part of the Event e.g 4103,4104,800 
                                 if eventX.get("ContextInfo"): # any(x in str(eventX) for x in matchUsers):
                                     if re.findall('Use[rId|rID|r]+.=.[a-zA-Z0-9]+.\w+.',str(eventX.get("ContextInfo"))):
-                                        targetUser = re.findall('Use[rId|rID|r]+.=.[a-zA-Z0-9]+.\w+.',str(eventX.get("ContextInfo")))
-                                        targetUser = ' '.join(targetUser)
+                                        
+                                        targetUser = re.findall('Use[rId|rID|r]+.=.\w+.[\w+]+[^\s]\w+.',str(eventX.get("ContextInfo")))
+                                        targetUser=targetUser[0]
+                                        targetUser = ''.join(targetUser)
                                         targetUser = targetUser.split("=")[1].strip()
                                     
                                     elif not t.get("targetUser") and t.get("UserID"):
                                         targetUser=t.get("UserID")
-                                        #t.update({'targetUser':targetUser})
 
-                                    elif not t.get("targetUser") and t.get("UserID"):
-                                        targetUser=t.get("UserID")
-                                        #t.update({'targetUser':targetUser})
-
-                                    elif not t.get("targetUser"):
+                                    else:
                                         #Some PowerShell events doesn't have the UserId property.
                                         #In this case, use a generic user, which is called `PSGenericUser` 
                                         #Check if targeUser key hasn't already set.
@@ -397,6 +398,9 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                                     print("[-] Event ID %s with Record ID %s discarded because the TargetUser %s is into the bListedUsers list." % (t.get("EventID"),t.get("EventRecordID"),targetUser))
                                     break
                                 else:
+                                    targetUser=re.findall('[^\s]+',targetUser.lower())
+                                    targetUser=targetUser[0]
+                                    targetUser=''.join(targetUser)
                                     t.update({'targetUser':targetUser})
 
                             
@@ -504,10 +508,10 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
             # if Sysmon File is provided, then "DestinationIp" is the correct tag.
             if t.get("DestinationIp"):
                 targetServer = t.get("DestinationIp")
-                t.update({'targetServer':targetServer})
+                t.update({'targetServer':targetServer.lower()})
             elif t.get("Computer"):
                 targetServer = t.get("Computer")
-                t.update({'targetServer':regEx(targetServer)})
+                t.update({'targetServer':targetServer.lower()})
             else:
                 print("[-] Something went wrong during the 'DestinationHost' parsing! ")
             #print("[-] Event ID %s with Record ID %s does not have a targetServer." % (t.get("EventID"),t.get("EventRecordID")))
@@ -621,11 +625,11 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 #OK#"MERGE (t:TargetHost {name:e.targetServer}) ",events=groupEvents) 
                 
                 "CREATE (e:Event {EventRecordID:eventPros.EventRecordID}) SET e=eventPros "
-                #"MERGE (e:Event {EventRecordID:eventPros.EventRecordID}) SET e=eventPros " #Avoid dublicate Events with MERGE and filtering.
+                #"MERGE (e:Event {EventRecordIDs:eventPros.EventRecordID}) SET e=eventPros " #Avoid dublicate Events with MERGE and filtering.
                 "MERGE (r:RemoteHosts {name:e.remoteHost,remoteHostname:e.remoteHostname}) "
                 "MERGE (t:TargetHost {name:e.targetServer}) ",events=groupEvents)
             total_time += time.time() - start
-            print("[1] insertEvents query completed after: %f " %(total_time))             
+            print("[1] Neo4j insertEvents query: %f " %(total_time))             
 
         
         with neo4jDriver.session() as session:
@@ -642,7 +646,7 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "SET t.CreatedByEventRecordID=e.EventRecordID) "
                 )
             total_time += time.time() - start
-            print("[2] createTargetUsers query completed after: %f " %(total_time))    
+            print("[2] Neo4j createTargetUsers query: %f " %(total_time))    
 
         with neo4jDriver.session() as session:    
             total_time = 0
@@ -659,7 +663,7 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "SET t.CreatedByEventRecordID=e.EventRecordID) "
             )
             total_time += time.time() - start
-            print("[3] createTargetUsers2 query completed after: %f " %(total_time))    
+            print("[3] Neo4j createTargetUsers2 query: %f " %(total_time))    
 
 
         with neo4jDriver.session() as session:
@@ -676,7 +680,7 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "SET t.CreatedByEventRecordID=e.EventRecordID) "
             )
             total_time += time.time() - start
-            print("[4] createTargetUsers3 query completed after: %f " %(total_time)) 
+            print("[4] Neoj createTargetUsers3 query: %f " %(total_time)) 
 
         with neo4jDriver.session() as session:
             total_time = 0
@@ -692,30 +696,8 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "SET s.CreatedByEventRecordID=e.EventRecordID) "
             )
             total_time += time.time() - start
-            print("[5] createSubjectUsers query completed after: %f " %(total_time)) 
+            print("[5] Neo4j createSubjectUsers query: %f " %(total_time)) 
 
-        with neo4jDriver.session() as session:
-            total_time = 0
-            start = time.time()
-            deleteDublicatesTargetUsers=session.run(
-                "MATCH (p:TargetUser) "
-                "WITH p.CreatedByEventRecordID as id, collect(p) AS nodes "
-                "WHERE size(id) >  1 "
-                "UNWIND nodes[1..] AS n "
-                "DETACH DELETE n "
-            )
-            total_time += time.time() - start
-            print("[6] deleteDublicatesTargetUsers query completed after: %f " %(total_time)) 
-
-
-        '''with neo4jDriver.session() as session:
-            deleteDublicatesTargetUsers=session.run(
-                "MATCH (s:SubjectUsers) "
-                "WITH s.CreatedByEventRecordID as id, collect(s) AS nodes "
-                "WHERE size(id) >  1 "
-                "UNWIND nodes[1..] AS n "
-                "DETACH DELETE n "
-            )'''
         
         with neo4jDriver.session() as session:    
             total_time = 0
@@ -741,7 +723,7 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "SET b.SubjectUserRealName=e.SubjectUserName)")
             
             total_time += time.time() - start
-            print("[7] UpdateSubjectUsers query completed after: %f " %(total_time))
+            print("[6] Neo4j UpdateSubjectUsers query: %f " %(total_time))
 
         with neo4jDriver.session() as session:               
             total_time = 0
@@ -772,7 +754,7 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "SET (CASE WHEN NOT e.SubjectUserSid IN b.bindSubjectUserSids THEN b END).bindSubjectUserSids=b.bindSubjectUserSids+e.SubjectUserSid)")
             
             total_time += time.time() - start
-            print("[8] updateTargetUserNode query completed after %f: " %(total_time))
+            print("[7] Neo4j updateTargetUserNode query: %f " %(total_time))
 
         with neo4jDriver.session() as session:   
             total_time = 0
@@ -791,8 +773,35 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "SET (CASE WHEN NOT e.EventRecordID IN c.EventRecordIDs THEN c END).EventRecordIDs=c.EventRecordIDs+e.EventRecordID)"
             )
             total_time += time.time() - start
-            print("[9] updateTargetUserNode2 query completed after %f: " %(total_time))
+            print("[8] Neo4j updateTargetUserNode2 query %f: " %(total_time))
 
+        with neo4jDriver.session() as session:
+                total_time = 0
+                start = time.time()
+                deleteDublicatesTargetUsers=session.run(
+
+                    "MATCH (n:TargetUser) "
+                    "WITH n.EventRecordIDs as id, collect(n) as nodes "
+                    "WHERE size(nodes) > 1 "
+                    "UNWIND nodes[1..] AS n "
+                    "DETACH DELETE n"
+            
+                )
+                total_time += time.time() - start
+                print("[9] Neo4j deleteDublicatesTargetUsers query: %f " %(total_time))
+        
+
+        
+        '''with neo4jDriver.session() as session:
+            deleteDublicatesTargetUsers=session.run(
+                "MATCH (s:SubjectUsers) "
+                "WITH s.CreatedByEventRecordID as id, collect(s) AS nodes "
+                "WHERE size(id) >  1 "
+                "UNWIND nodes[1..] AS n "
+                "DETACH DELETE n "
+            )'''
+        
+        
         with neo4jDriver.session() as session:
             total_time = 0
             start = time.time()
@@ -815,7 +824,7 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 #"MERGE (r)-[r1:RemoteHostTOSubjectUsername]->(s)-[r2:SubjectUsernameTOTargetuser]-(t)-[r3:TargetUserTOEventID]-(e)-[r4:EventIDTOtargetHost]->(th)") #-[r3:TargetUserTOEventID]-(e)-[r4:EventIDTOtargetHost]->(th)
             )
             total_time += time.time() - start
-            print("[10] SubjectUserTargetUserRelationship1 query completed after: %f " %(total_time))
+            print("[10] Neo4j SubjectUserTargetUserRelationship1 query: %f " %(total_time))
         
         with neo4jDriver.session() as session:
             total_time = 0
@@ -833,7 +842,7 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
 
             )
             total_time += time.time() - start
-            print("[11] SubjectUserTargetUserRelationship2 query completed after: %f " %(total_time))
+            print("[11] Neo4j SubjectUserTargetUserRelationship2 query: %f " %(total_time))
 
         with neo4jDriver.session() as session:   
             total_time = 0
@@ -848,7 +857,7 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "MERGE (r)-[r5:Source2TargerUser]->(u)"
             )
             total_time += time.time() - start
-            print("[12] remoteHost2DomUserRelationship query completed after: %f " %(total_time))
+            print("[12] Neo4j remoteHost2DomUserRelationship query: %f " %(total_time))
 
         with neo4jDriver.session() as session:
             total_time = 0
@@ -864,9 +873,10 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
             )
 
             total_time += time.time() - start
-            print("[13] targetUser2EventRelationship query completed after: %f " %(total_time))
+            print("[13] Neo4j targetUser2EventRelationship query: %f " %(total_time))
 
 
+            
             
     except Exception as e:
         print(e)
