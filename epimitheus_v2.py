@@ -332,7 +332,7 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
 
             ##################################END - MESSAGE TAG###################################################################
             
-            if (t.get("EventID") not in ["4100","4103","4104","400","403","500","501","600","800"] or not "powershell" in t.get("Channel")): # Not In Powershell Events
+            if (t.get("EventID") not in ["4100","4103","4104","400","403","500","501","600","800"] and not "powershell" in t.get("Channel")): # Not In Powershell Events
                 
                 
                 try:
@@ -358,7 +358,7 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                     t.update({'targetUser':targetUser})
                 else:
                     print("[-] Event ID %s with Record ID %s discarded because the TargetUser %s is into the bListedUsers list." % (t.get("EventID"),t.get("EventRecordID"),targetUser))
-                    break
+                    
 
             # PowerShell logging cheatsheet: https://static1.squarespace.com/static/552092d5e4b0661088167e5c/t/5760096ecf80a129e0b17634/1465911664070/Windows+PowerShell+Logging+Cheat+Sheet+ver+June+2016+v2.pdf
             elif t.get("EventID") in ["4100","4103","4104","400","403","500","501","600","800"]:
@@ -394,14 +394,14 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                                         targetUser = "PSGenericUser"
                                         #t.update({'targetUser':targetUser})
 
-                                if targetUser in bListedUsers:
-                                    print("[-] Event ID %s with Record ID %s discarded because the TargetUser %s is into the bListedUsers list." % (t.get("EventID"),t.get("EventRecordID"),targetUser))
-                                    break
-                                else:
-                                    targetUser=re.findall('[^\s]+',targetUser.lower())
-                                    targetUser=targetUser[0]
-                                    targetUser=''.join(targetUser)
-                                    t.update({'targetUser':targetUser})
+                                    if targetUser in bListedUsers:
+                                        print("[-] Event ID %s with Record ID %s discarded because the TargetUser %s is into the bListedUsers list." % (t.get("EventID"),t.get("EventRecordID"),targetUser))
+                                        
+                                    else:
+                                        targetUser=re.findall('[^\s]+',targetUser.lower())
+                                        targetUser=targetUser[0]
+                                        targetUser=''.join(targetUser)
+                                        t.update({'targetUser':targetUser})
 
                             
                             except Exception as error:
@@ -624,7 +624,7 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 #OK#"MERGE (r:RemoteHosts {name:e.remoteHost,remoteHostname:e.remoteHostname}) "
                 #OK#"MERGE (t:TargetHost {name:e.targetServer}) ",events=groupEvents) 
                 
-                "CREATE (e:Event {EventRecordID:eventPros.EventRecordID}) SET e=eventPros "
+                "CREATE (e:Event) SET e=eventPros "
                 #"MERGE (e:Event {EventRecordIDs:eventPros.EventRecordID}) SET e=eventPros " #Avoid dublicate Events with MERGE and filtering.
                 "MERGE (r:RemoteHosts {name:e.remoteHost,remoteHostname:e.remoteHostname}) "
                 "MERGE (t:TargetHost {name:e.targetServer}) ",events=groupEvents)
