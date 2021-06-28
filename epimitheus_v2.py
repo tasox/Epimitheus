@@ -674,7 +674,9 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "WITH collect(e.targetUser) as TargetUserNames,e "
                 "UNWIND TargetUserNames AS TargetUserName "
                 "FOREACH(p in TargetUserName | MERGE (t:TargetUser {name:p,EventRecordIDs: [ ],remoteHost:e.remoteHost,targetServer:e.targetServer}) "
+                "SET t.hasSubjectUsernameTag='false' "
                 "SET t.IsCreated='true' "
+                "SET t.TargetRealName=e.targetUser "
                 "SET t.CreatedByEventRecordID=e.EventRecordID) "
             )
             total_time += time.time() - start
@@ -789,18 +791,16 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "SET b.TargetRealName=e.targetUser "
                 "SET (CASE WHEN NOT e.EventRecordID IN b.EventRecordIDs THEN b END).EventRecordIDs=b.EventRecordIDs+e.EventRecordID "
                 "SET (CASE WHEN NOT e.SubjectUserName IN b.SubjectUsernames THEN b END).SubjectUsernames=b.SubjectUsernames+e.SubjectUserName "
-                #"SET b.remoteHost = e.remoteHost "
                 "SET b.IsSubjectUser = 'false' "
-                #"SET b.targetServer = e.targetServer "
                 "SET b.hasTargetUsernameTag='true' "
                 "SET b.hasSubjectUsernameTag='true' "
-                #"SET b.prodByEventRecordID=e.EventRecordID "
                 "SET (CASE WHEN NOT e.SubjectUserSid IN b.bindSubjectUserSids THEN b END).bindSubjectUserSids=b.bindSubjectUserSids+e.SubjectUserSid)")
             
             # Change the name of SubjectUsers node-> Add (S).
             UpdateSubjectUsers2 = session.run(
 
                 "MATCH(t:TargetUser) "
+                "WHERE t.hasSubjectUsernameTag='true' "
                 "SET t.name=t.name+'(T)'"
             )
             total_time += time.time() - start
@@ -811,16 +811,17 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
             start = time.time()
             ### Update 'TargetUser' node BUT for users that DONT have SubjectUsers
             updateTargetUserNode3=session.run(
+
                 "MATCH (u:TargetUser),(e:Event) "
                 "WHERE u.TargetRealName=e.targetUser "
                 "AND u.remoteHost=e.remoteHost "
                 "AND u.targetServer=e.targetServer "
-                "AND u.hasSubjectUserNameTag='false' "
+                "AND u.hasSubjectUsernameTag='false' "
                 "WITH collect(u.TargetRealName) as targetUserNames,e "
                 "UNWIND targetUserNames as targetUserName "
                 "FOREACH (p in targetUserName | MERGE (c:TargetUser {name:p}) "
-                "SET c.hasSubjectUser='false' "
                 "SET (CASE WHEN NOT e.EventRecordID IN c.EventRecordIDs THEN c END).EventRecordIDs=c.EventRecordIDs+e.EventRecordID)"
+            
             )
             total_time += time.time() - start
             print("[8] Neo4j updateTargetUserNode2 query %f: " %(total_time))
@@ -841,17 +842,7 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 print("[9] Neo4j deleteDublicatesTargetUsers query: %f " %(total_time))
         
 
-        
-        '''with neo4jDriver.session() as session:
-            deleteDublicatesTargetUsers=session.run(
-                "MATCH (s:SubjectUsers) "
-                "WITH s.CreatedByEventRecordID as id, collect(s) AS nodes "
-                "WHERE size(id) >  1 "
-                "UNWIND nodes[1..] AS n "
-                "DETACH DELETE n "
-            )'''
-        
-        
+  
         with neo4jDriver.session() as session:
             total_time = 0
             start = time.time()
@@ -860,6 +851,7 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
             # RemoteHost -> User -> TargetUser -> EventID -> targetServer
         #    allInOnerelationship = session.run("MATCH (u:TargetUser),(u2:TargetUser),(e:Event),(r:RemoteHosts),(t:TargetHost) WHERE u.name IN u2.subjectUsernames AND e.EventRecordID IN u.EventRecordIDs AND e.EventRecordID IN u2.EventRecordIDs AND u.name = e.SubjectUserName AND u.remoteHost = r.name AND u.IsSubjectUser = 'true' AND u.IsTargetUser IS NULL AND t.name = u2.targetServer MERGE (r)-[r1:RemoteHostTOSubjectUsername]-(u)-[r2:SubjectUsernameTOTargetuser]-(u2)-[r3:TargetUserTOEventID]-(e)-[r4:EventIDTOtargetHost]->(t)") # WITH collect(r1)[1..] as rels, collect(r2)[1..] as rels2 FOREACH (r1 in rels | DELETE r1) FOREACH (r2 in rels2 | DELETE r2) 
             SubjectUserTargetUserRelationship1 = session.run(
+
                 "MATCH (r:RemoteHosts),(t:TargetUser),(s:SubjectUser),(th:TargetHost),(e:Event) "
                 "WHERE t.IsSubjectUser='false' "
                 "AND e.remoteHost=r.name "
@@ -871,7 +863,7 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "AND EXISTS(e.SubjectUserName) "
                 "AND e.EventRecordID IN t.EventRecordIDs "
                 "MERGE (r)-[r1:RemoteHostTOSubjectUsername]-(s)-[r2:SubjectUsernameTOTargetuser]->(t)"
-                #"MERGE (r)-[r1:RemoteHostTOSubjectUsername]->(s)-[r2:SubjectUsernameTOTargetuser]-(t)-[r3:TargetUserTOEventID]-(e)-[r4:EventIDTOtargetHost]->(th)") #-[r3:TargetUserTOEventID]-(e)-[r4:EventIDTOtargetHost]->(th)
+            
             )
             total_time += time.time() - start
             print("[10] Neo4j SubjectUserTargetUserRelationship1 query: %f " %(total_time))
@@ -880,6 +872,7 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
             total_time = 0
             start = time.time()
             SubjectUserTargetUserRelationship2 = session.run(
+
                 "MATCH (t:TargetUser),(e:Event),(th:TargetHost) "
                 "WHERE t.IsSubjectUser='false' "
                 "AND t.targetServer=e.targetServer "
@@ -904,7 +897,7 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 
                 "MATCH (r:RemoteHosts),(u:TargetUser) "
                 "WHERE u.remoteHost = r.name "
-                "AND u.hasSubjectUser='false' "
+                "AND u.hasSubjectUsernameTag='false' "
                 "MERGE (r)-[r5:Source2TargetUser]->(u)"
             )
             total_time += time.time() - start
