@@ -4,7 +4,7 @@ from logging import NullHandler
 from xml.dom import minidom
 from xml.dom.minidom import Document
 from neo4j import GraphDatabase, basic_auth
-import os,sys,datetime,time,re, subprocess
+import os,sys,time,re, subprocess
 import multiprocessing
 from multiprocessing import Process,Lock
 import argparse
@@ -16,6 +16,7 @@ from xml.etree.cElementTree import Element, ElementTree
 from lxml import etree
 from io import StringIO, BytesIO
 import unicodedata,codecs
+import datetime
 
 
 def get_events(input_file, parse_xml=False):
@@ -117,7 +118,7 @@ def eventParser(eventIDs,xmlDoc):
                         #print(attrs) #[OK]                         
                         
                         dict={'Tags':tag,'Attrs':attrs,'Value':value}
-                        
+                        #print(dict)
                         if not dict['Attrs'] and dict['Tags'] != 'Data':
                             #print ("[+]%s:%s" %(dict['Tags'],dict['Value'])) #[OK]
                             tags = dict['Tags']
@@ -137,6 +138,12 @@ def eventParser(eventIDs,xmlDoc):
                         elif dict['Attrs'] and dict['Tags'] != 'Data' and dict['Tags'] != 'Execution':
                             #print ("[+]%s:%s" %(dict['Tags'],dict['Value'])) #[OK]
                             for key,value in dict['Attrs']:
+                                
+                                if key == "SystemTime":
+                                    valueDate= datetime.datetime.fromisoformat(value)
+                                    valueConvert=valueDate.isoformat()
+                                    value=valueConvert
+                                
                                 #print ("[+]%s:%s" %(key,value)) #[OK]
                                 if value:
                                     tags=key
