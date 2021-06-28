@@ -338,6 +338,14 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                 try:
                     if t.get("TargetUserName"):
                         targetUser = t.get("TargetUserName")
+                    elif t.get("TargetName"):
+                        targetUser = t.get("TargetName")
+                        if re.findall('=[a-zA-Z0-9@./]+',str(targetUser)):
+                            targetUser = re.findall('=[a-zA-Z0-9@./]+',str(targetUser))
+                            targetUser = ''.join(targetUser)
+                            targetUser = targetUser.split("=")[1].strip()
+                        else:
+                            targetUser = t.get("TargetName")                        
                     elif t.get("SubjectUserName"):
                         targetUser = t.get("SubjectUserName")
                     # if Sysmon File is provided, then "User" is the correct tag.
@@ -669,13 +677,24 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
         with neo4jDriver.session() as session:
             total_time = 0
             start = time.time()
-            # Create 'TargetUser' node where SubjectUserName and TargetUserName tags exists.
+            # Create 'TargetUser' node where SubjectUserName and TargetUserName tags OR TargetName exists.
             createTargetUsers3=session.run(
                 "MATCH (e:Event) "
                 "WHERE EXISTS(e.SubjectUserName) AND EXISTS(e.TargetUserName) "
                 "WITH collect(e.TargetUserName) as TargetUserNames,e "
                 "UNWIND TargetUserNames as TargetUserName "
                 "FOREACH(p in TargetUserName | MERGE (t:TargetUser {name:p,SubjectUsernames: [ ],EventRecordIDs: [ ],bindSubjectUserSids: [ ],remoteHost:e.remoteHost,targetServer:e.targetServer}) "
+                "SET t.IsCreated='true' "
+                "SET t.CreatedByEventRecordID=e.EventRecordID) "
+            )
+        
+        with neo4jDriver.session() as session:
+            createTargetUsers4=session.run(
+                "MATCH (e:Event) "
+                "WHERE EXISTS(e.SubjectUserName) AND EXISTS(e.TargetName) "
+                "WITH collect(e.targetUser) as TargetNames,e "
+                "UNWIND TargetNames as TargetName "
+                "FOREACH(p in TargetName | MERGE (t:TargetUser {name:p,SubjectUsernames: [ ],EventRecordIDs: [ ],bindSubjectUserSids: [ ],remoteHost:e.remoteHost,targetServer:e.targetServer}) "
                 "SET t.IsCreated='true' "
                 "SET t.CreatedByEventRecordID=e.EventRecordID) "
             )
@@ -688,10 +707,20 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
             # Create 'SubjectUser' Node - Initialization
             createSubjectUsers=session.run(
                 "MATCH (e:Event) "
-                "WHERE EXISTS(e.SubjectUserName) AND EXISTS(e.TargetUserName) "
+                "WHERE EXISTS(e.SubjectUserName) AND EXISTS(e.TargetUserName)"
                 "WITH collect(e.SubjectUserName) as SubjectUserNames,e "
                 "UNWIND SubjectUserNames as SubjectUserName "
-                "FOREACH(p in SubjectUserName | MERGE (s:SubjectUser {name:p,TargetUsernames: [ ],EventRecordIDs: [ ],bindTargetUserSids: [ ],IsSubjectUser:'true',remoteHost:e.remoteHost,targetServer:e.targetServer,hasTargetUsernameTag:'true',hasSubjectUsernameTag:'true'}) "
+                "FOREACH(p in SubjectUserName | MERGE (s:SubjectUser {name:p,SubjectUserRealName:p,TargetUsernames: [ ],EventRecordIDs: [ ],bindTargetUserSids: [ ],IsSubjectUser:'true',remoteHost:e.remoteHost,targetServer:e.targetServer,hasTargetUsernameTag:'true',hasSubjectUsernameTag:'true'}) "
+                "SET s.IsCreated='true' "
+                "SET s.CreatedByEventRecordID=e.EventRecordID) "
+            )
+
+            createSubjectUsers2=session.run(
+                "MATCH (e:Event) "
+                "WHERE EXISTS(e.SubjectUserName) AND EXISTS(e.TargetName)"
+                "WITH collect(e.SubjectUserName) as SubjectUserNames,e "
+                "UNWIND SubjectUserNames as SubjectUserName "
+                "FOREACH(p in SubjectUserName | MERGE (s:SubjectUser {name:p,SubjectUserRealName:p,TargetUsernames: [ ],EventRecordIDs: [ ],bindTargetUserSids: [ ],IsSubjectUser:'true',remoteHost:e.remoteHost,targetServer:e.targetServer,hasTargetUsernameTag:'true',hasSubjectUsernameTag:'true'}) "
                 "SET s.IsCreated='true' "
                 "SET s.CreatedByEventRecordID=e.EventRecordID) "
             )
@@ -709,21 +738,29 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "AND r.name=e.remoteHost "
                 "AND t.name=e.targetServer "
                 "AND u.remoteHost = r.name "
-                "AND s.name=e.SubjectUserName " # This equation is important in order to add EventRecordID correctly.
+                "AND s.SubjectUserRealName=e.SubjectUserName " # This equation is important in order to add EventRecordID correctly.
                 "AND EXISTS(e.SubjectUserName) AND e.SubjectUserName IS NOT NULL "
-                "AND EXISTS(e.TargetUserName) AND e.TargetUserName IS NOT NULL "
+                "AND ((EXISTS(e.TargetUserName) AND e.TargetUserName IS NOT NULL) OR (EXISTS(e.TargetName) AND e.TargetName IS NOT NULL))"
                 "SET s.EventRecordIDs=[e.EventRecordID] " #Adding the first matched EventRecordID. On the FOREACH part is adding the rest.
                 "WITH collect(e.SubjectUserName) as subjectUsernames, e "
                 "UNWIND subjectUsernames AS subjectUsername "
                 "FOREACH(p IN subjectUsername | MERGE (b:SubjectUser {name:p}) "
-                "SET b.name=b.name+'(S)' "
+                #"SET b.name=b.name+'(S)' "
                 "SET (CASE WHEN NOT e.EventRecordID IN b.EventRecordIDs THEN b END).EventRecordIDs=b.EventRecordIDs+e.EventRecordID "
-                "SET (CASE WHEN NOT e.TargetUserName IN b.TargetUsernames THEN b END).TargetUsernames=b.TargetUsernames+e.TargetUserName "
+                "SET (CASE WHEN NOT e.targetUser IN b.TargetUsernames THEN b END).TargetUsernames=b.TargetUsernames+e.targetUser "
                 "SET (CASE WHEN NOT e.TargetUserSid IN b.bindTargetUserSids THEN b END).bindTargetUserSids=b.bindTargetUserSids+e.TargetUserSid "
-                "SET b.SubjectUserRealName=e.SubjectUserName)")
+                "SET b.SubjectUserRealName=e.SubjectUserName)"
+            )
             
+            # Change the name of SubjectUsers node-> Add (S).
+            UpdateSubjectUsers2 = session.run(
+
+                "MATCH(s:SubjectUser) "
+                "SET s.name=s.name+'(S)'"
+            )
             total_time += time.time() - start
             print("[6] Neo4j UpdateSubjectUsers query: %f " %(total_time))
+        
 
         with neo4jDriver.session() as session:               
             total_time = 0
@@ -736,12 +773,12 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "AND t.name=e.targetServer "
                 "AND u.remoteHost = r.name "
                 "AND EXISTS(e.SubjectUserName) "
-                "AND EXISTS(e.TargetUserName) "
+                "AND (EXISTS(e.TargetUserName) OR EXISTS(e.TargetName)) "
                 "SET u.EventRecordIDs=[e.EventRecordID] "
-                "WITH collect(e.TargetUserName) as targetUsernames,e "
+                "WITH collect(e.targetUser) as targetUsernames,e "
                 "UNWIND targetUsernames AS targetUsername "
                 "FOREACH(p IN targetUsername | MERGE (b:TargetUser {name:p}) "
-                "SET b.name=b.name+'(T)' "
+                #"SET b.name=b.name+'(T)' "
                 "SET b.TargetRealName=e.targetUser "
                 "SET (CASE WHEN NOT e.EventRecordID IN b.EventRecordIDs THEN b END).EventRecordIDs=b.EventRecordIDs+e.EventRecordID "
                 "SET (CASE WHEN NOT e.SubjectUserName IN b.SubjectUsernames THEN b END).SubjectUsernames=b.SubjectUsernames+e.SubjectUserName "
@@ -753,6 +790,12 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 #"SET b.prodByEventRecordID=e.EventRecordID "
                 "SET (CASE WHEN NOT e.SubjectUserSid IN b.bindSubjectUserSids THEN b END).bindSubjectUserSids=b.bindSubjectUserSids+e.SubjectUserSid)")
             
+            # Change the name of SubjectUsers node-> Add (S).
+            UpdateSubjectUsers2 = session.run(
+
+                "MATCH(t:TargetUser) "
+                "SET t.name=t.name+'(T)'"
+            )
             total_time += time.time() - start
             print("[7] Neo4j updateTargetUserNode query: %f " %(total_time))
 
@@ -760,13 +803,13 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
             total_time = 0
             start = time.time()
             ### Update 'TargetUser' node BUT for users that DONT have SubjectUsers
-            updateTargetUserNode2=session.run(
+            updateTargetUserNode3=session.run(
                 "MATCH (u:TargetUser),(e:Event) "
-                "WHERE u.name=e.targetUser "
+                "WHERE u.TargetRealName=e.targetUser "
                 "AND u.remoteHost=e.remoteHost "
                 "AND u.targetServer=e.targetServer "
-                "AND NOT EXISTS (u.hasSubjectUserNameTag) "
-                "WITH collect(u.name) as targetUserNames,e "
+                "AND u.hasSubjectUserNameTag='false' "
+                "WITH collect(u.TargetRealName) as targetUserNames,e "
                 "UNWIND targetUserNames as targetUserName "
                 "FOREACH (p in targetUserName | MERGE (c:TargetUser {name:p}) "
                 "SET c.hasSubjectUser='false' "
@@ -817,7 +860,7 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "AND t.remoteHost=s.remoteHost "
                 "AND s.SubjectUserRealName IN t.SubjectUsernames "
                 "AND t.targetServer=s.targetServer "
-                "AND EXISTS(e.TargetUserName) "
+                "AND (EXISTS(e.TargetUserName) OR EXISTS(e.TargetName)) "
                 "AND EXISTS(e.SubjectUserName) "
                 "AND e.EventRecordID IN t.EventRecordIDs "
                 "MERGE (r)-[r1:RemoteHostTOSubjectUsername]-(s)-[r2:SubjectUsernameTOTargetuser]->(t)"
@@ -836,7 +879,7 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "AND t.remoteHost=e.remoteHost "
                 "AND e.EventRecordID IN t.EventRecordIDs "
                 "AND e.targetServer=th.name "
-                "AND EXISTS(e.TargetUserName) "
+                "AND (EXISTS(e.TargetUserName) OR EXISTS(e.TargetName)) "
                 "AND EXISTS(e.SubjectUserName) "
                 "MERGE (t)-[r3:TargetUserTOEvent]-(e)-[r4:EventIDTOtargetHost]->(th)"
 
@@ -851,10 +894,11 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
             #deleteDublicates_AllInOnerelationship = session.run("MATCH (r:RemoteHosts)-[r1]-(t:SubjectUser)-[r2]->(s:TargetUser) with r,t,s,type(r1) as typ, tail(collect(r1)) as coll foreach(x in coll | delete x)")
             # Create relationships only for Users that NOT contains 'SubjectUserName'
             remoteHost2DomUserRelationship=session.run(
+                
                 "MATCH (r:RemoteHosts),(u:TargetUser) "
                 "WHERE u.remoteHost = r.name "
                 "AND u.hasSubjectUser='false' "
-                "MERGE (r)-[r5:Source2TargerUser]->(u)"
+                "MERGE (r)-[r5:Source2TargetUser]->(u)"
             )
             total_time += time.time() - start
             print("[12] Neo4j remoteHost2DomUserRelationship query: %f " %(total_time))
@@ -863,6 +907,7 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
             total_time = 0
             start = time.time()    
             targetUser2EventRelationship = session.run(
+                
                 "MATCH (u:TargetUser),(e:Event),(t:TargetHost) "
                 "WHERE e.targetUser = u.name "
                 "AND t.name=e.targetServer "
