@@ -386,12 +386,11 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
 
                     #Check if the word "User=" or "UserId=" etc. exists inside the <Data> tag
                     # Before search unpack the Event data which are List format.
-                    for eventX in eventData:                            
-                        #print(eventX)
+                    for eventX in eventData:                              
                         if eventX != None:
                             try:    
                                 # Try find usernames on Description part of the Event e.g 4103,4104,800 
-                                if eventX.get("ContextInfo"): # any(x in str(eventX) for x in matchUsers):
+                                if eventX.get("ContextInfo"):
                                     if re.findall('Use[rId|rID|r]+.=.[a-zA-Z0-9]+.\w+.',str(eventX.get("ContextInfo"))):
                                         
                                         targetUser = re.findall('Use[rId|rID|r]+.=.\w+.[\w+]+[^\s]\w+.',str(eventX.get("ContextInfo")))
@@ -399,28 +398,40 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                                         targetUser = ''.join(targetUser)
                                         targetUser = targetUser.split("=")[1].strip()
                                     
-                                    elif not t.get("targetUser") and t.get("UserID"):
+                                        if targetUser in bListedUsers:
+                                            print("[-] Event ID %s with Record ID %s discarded because the TargetUser %s is into the bListedUsers list." % (t.get("EventID"),t.get("EventRecordID"),targetUser))
+                                                
+                                        else:
+                                            targetUser=re.findall('[^\s]+',targetUser.lower())
+                                            targetUser=targetUser[0]
+                                            targetUser=''.join(targetUser)
+                                            t.update({'targetUser':targetUser})
+
+                                   
+                                    #If ContextInfo exist as well as the UserID. 
+                                    elif t.get("UserID"):                                    
                                         targetUser=t.get("UserID")
+                                        t.update({'targetUser':targetUser})
 
                                     else:
                                         #Some PowerShell events doesn't have the UserId property.
                                         #In this case, use a generic user, which is called `PSGenericUser` 
                                         #Check if targeUser key hasn't already set.
                                         targetUser = "PSGenericUser"
-                                        #t.update({'targetUser':targetUser})
-
-                                    if targetUser in bListedUsers:
-                                        print("[-] Event ID %s with Record ID %s discarded because the TargetUser %s is into the bListedUsers list." % (t.get("EventID"),t.get("EventRecordID"),targetUser))
-                                        
-                                    else:
-                                        targetUser=re.findall('[^\s]+',targetUser.lower())
-                                        targetUser=targetUser[0]
-                                        targetUser=''.join(targetUser)
-                                        t.update({'targetUser':targetUser})
-
+                                        t.update({'targetUser':targetUser})    
+                                
+                                
+                                if not eventX.get("ContextInfo") and t.get("UserID") and not t.get("targetUser"):
+                                    targetUser=t.get("UserID")
+                                    t.update({'targetUser':targetUser})
+                                    
+                                elif not eventX.get("ContextInfo") and t.get("UserID") and not t.get("targetUser"):
+                                    targetUser = "PSGenericUser"
+                                    t.update({'targetUser':targetUser})
                             
                             except Exception as error:
                                 print("[-] TargetUser RegEx error! %s" % error)
+                                
                             
 
                             try:
