@@ -424,7 +424,7 @@ def createXML(evIDs,lhostIPs,bListedUsers,bListedShareFolders,eventList,outXMLFi
                                 if not eventX.get("ContextInfo") and t.get("UserID") and not t.get("targetUser"):
                                     targetUser=t.get("UserID")
                                     t.update({'targetUser':targetUser})
-                                    
+
                                 elif not eventX.get("ContextInfo") and t.get("UserID") and not t.get("targetUser"):
                                     targetUser = "PSGenericUser"
                                     t.update({'targetUser':targetUser})
@@ -646,106 +646,51 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
             # Create Neo4j Nodes
             insertEvents = session.run(
                 "UNWIND $events as eventPros "
-                #OK#"CREATE (e:Event) SET e=eventPros "
-                #OK#"MERGE (r:RemoteHosts {name:e.remoteHost,remoteHostname:e.remoteHostname}) "
-                #OK#"MERGE (t:TargetHost {name:e.targetServer}) ",events=groupEvents) 
+               
+                "CREATE (e:Event) "
+                "SET e=eventPros "
+                "SET (CASE WHEN EXISTS(e.SubjectUserName) AND NOT EXISTS(e.TargetUserName) THEN e END).hasSubjectUser='false' "
+                "SET (CASE WHEN EXISTS(e.SubjectUserName) AND EXISTS(e.TargetUserName) THEN e END).hasSubjectUser='true' "
+                "SET (CASE WHEN EXISTS(e.SubjectUserName) AND EXISTS(e.TargetName) THEN e END).hasSubjectUser='true' "
+                "SET (CASE WHEN NOT EXISTS(e.SubjectUserName) AND EXISTS(e.TargetUserName) THEN e END).hasSubjectUser='false' "
+                #Example: PowerShell Events.
+                "SET (CASE WHEN NOT EXISTS(e.SubjectUserName) AND NOT EXISTS(e.TargetUserName) THEN e END).hasSubjectUser='false' "
+                "WITH e WHERE e.targetUser IS NOT NULL " #Avoid erros when targetUser is blacklisted and it's name will be NULL.
                 
-                "CREATE (e:Event) SET e=eventPros "
                 #"MERGE (e:Event {EventRecordIDs:eventPros.EventRecordID}) SET e=eventPros " #Avoid dublicate Events with MERGE and filtering.
                 "MERGE (r:RemoteHosts {name:e.remoteHost,remoteHostname:e.remoteHostname}) "
+                
+                "MERGE (u:TargetUser {name:e.targetUser,remoteHost:e.remoteHost,targetServer:e.targetServer,hasSubjectUser:e.hasSubjectUser,EventRecordIDs: [ ]}) "
+                "SET u.EventRecordIDs=u.EventRecordIDs+e.EventRecordID " #Append the EventRecordIDs
+                "SET u.SubjectUsernames=[ ] "
+                "SET u.bindSubjectUserSids=[ ] "
+                
                 "MERGE (t:TargetHost {name:e.targetServer}) ",events=groupEvents)
             total_time += time.time() - start
             print("[1] Neo4j insertEvents query: %f " %(total_time))             
 
-        
-        with neo4jDriver.session() as session:
-            total_time = 0
-            start = time.time()
-            # Create 'TargetUser' Node - Initialization 
-            createTargetUsers=session.run(
-                "MATCH (e:Event) "
-                "WHERE NOT EXISTS(e.SubjectUserName) OR NOT EXISTS(e.TargetUserName) "
-                "WITH collect(e.SubjectUserName) as SubjectUserNames,collect(e.TargetUserName) as TargetUserNames,e "
-                "UNWIND SubjectUserNames+TargetUserNames as TargetSubjectUserName "
-                "FOREACH(p in TargetSubjectUserName | MERGE (t:TargetUser {name:p,SubjectUsernames: [ ],EventRecordIDs: [ ],bindSubjectUserSids: [ ],remoteHost:e.remoteHost,targetServer:e.targetServer}) "
-                "SET t.IsCreated='true' "
-                "SET t.CreatedByEventRecordID=e.EventRecordID) "
-                )
-            total_time += time.time() - start
-            print("[2] Neo4j createTargetUsers query: %f " %(total_time))    
-
-        with neo4jDriver.session() as session:    
-            total_time = 0
-            start = time.time()
-            #Create 'TargetUser' Node from events that NOT having 'SubjectUserName' AND 'TargetUserName'.
-            # e.g. Windows Event ID 1116, 1117 etc.
-            createTargetUsers2=session.run(
-                "MATCH (e:Event) "
-                "WHERE NOT EXISTS(e.SubjectUserName) AND NOT EXISTS(e.TargetUserName) "
-                "WITH collect(e.targetUser) as TargetUserNames,e "
-                "UNWIND TargetUserNames AS TargetUserName "
-                "FOREACH(p in TargetUserName | MERGE (t:TargetUser {name:p,EventRecordIDs: [ ],remoteHost:e.remoteHost,targetServer:e.targetServer}) "
-                "SET t.hasSubjectUsernameTag='false' "
-                "SET t.IsCreated='true' "
-                "SET t.TargetRealName=e.targetUser "
-                "SET t.CreatedByEventRecordID=e.EventRecordID) "
-            )
-            total_time += time.time() - start
-            print("[3] Neo4j createTargetUsers2 query: %f " %(total_time))    
-
-
-        with neo4jDriver.session() as session:
-            total_time = 0
-            start = time.time()
-            # Create 'TargetUser' node where SubjectUserName and TargetUserName tags OR TargetName exists.
-            createTargetUsers3=session.run(
-                "MATCH (e:Event) "
-                "WHERE EXISTS(e.SubjectUserName) AND EXISTS(e.TargetUserName) "
-                "WITH collect(e.TargetUserName) as TargetUserNames,e "
-                "UNWIND TargetUserNames as TargetUserName "
-                "FOREACH(p in TargetUserName | MERGE (t:TargetUser {name:p,SubjectUsernames: [ ],EventRecordIDs: [ ],bindSubjectUserSids: [ ],remoteHost:e.remoteHost,targetServer:e.targetServer}) "
-                "SET t.IsCreated='true' "
-                "SET t.CreatedByEventRecordID=e.EventRecordID) "
-            )
-        
-        with neo4jDriver.session() as session:
-            createTargetUsers4=session.run(
-                "MATCH (e:Event) "
-                "WHERE EXISTS(e.SubjectUserName) AND EXISTS(e.TargetName) "
-                "WITH collect(e.targetUser) as TargetNames,e "
-                "UNWIND TargetNames as TargetName "
-                "FOREACH(p in TargetName | MERGE (t:TargetUser {name:p,SubjectUsernames: [ ],EventRecordIDs: [ ],bindSubjectUserSids: [ ],remoteHost:e.remoteHost,targetServer:e.targetServer}) "
-                "SET t.IsCreated='true' "
-                "SET t.CreatedByEventRecordID=e.EventRecordID) "
-            )
-            total_time += time.time() - start
-            print("[4] Neoj createTargetUsers3 query: %f " %(total_time)) 
+###########################################Subject Users ###############################################################
 
         with neo4jDriver.session() as session:
             total_time = 0
             start = time.time()
             # Create 'SubjectUser' Node - Initialization
             createSubjectUsers=session.run(
+
                 "MATCH (e:Event) "
-                "WHERE EXISTS(e.SubjectUserName) AND EXISTS(e.TargetUserName)"
+                #"WHERE EXISTS(e.SubjectUserName) AND EXISTS(e.TargetUserName) "
+                "WHERE e.hasSubjectUser='true' "
                 "WITH collect(e.SubjectUserName) as SubjectUserNames,e "
                 "UNWIND SubjectUserNames as SubjectUserName "
                 "FOREACH(p in SubjectUserName | MERGE (s:SubjectUser {name:p,SubjectUserRealName:p,TargetUsernames: [ ],EventRecordIDs: [ ],bindTargetUserSids: [ ],IsSubjectUser:'true',remoteHost:e.remoteHost,targetServer:e.targetServer,hasTargetUsernameTag:'true',hasSubjectUsernameTag:'true'}) "
                 "SET s.IsCreated='true' "
+                "SET s.IsSubjectUser='true' "
                 "SET s.CreatedByEventRecordID=e.EventRecordID) "
+            
             )
 
-            createSubjectUsers2=session.run(
-                "MATCH (e:Event) "
-                "WHERE EXISTS(e.SubjectUserName) AND EXISTS(e.TargetName)"
-                "WITH collect(e.SubjectUserName) as SubjectUserNames,e "
-                "UNWIND SubjectUserNames as SubjectUserName "
-                "FOREACH(p in SubjectUserName | MERGE (s:SubjectUser {name:p,SubjectUserRealName:p,TargetUsernames: [ ],EventRecordIDs: [ ],bindTargetUserSids: [ ],IsSubjectUser:'true',remoteHost:e.remoteHost,targetServer:e.targetServer,hasTargetUsernameTag:'true',hasSubjectUsernameTag:'true'}) "
-                "SET s.IsCreated='true' "
-                "SET s.CreatedByEventRecordID=e.EventRecordID) "
-            )
             total_time += time.time() - start
-            print("[5] Neo4j createSubjectUsers query: %f " %(total_time)) 
+            print("[2] Neo4j createSubjectUsersNode query: %f " %(total_time)) 
 
         
         with neo4jDriver.session() as session:    
@@ -753,106 +698,47 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
             start = time.time()
             # Update 'SubjectUser' node.
             UpdateSubjectUsers = session.run(
-                "MATCH (e:Event),(r:RemoteHosts),(t:TargetHost),(u:TargetUser),(s:SubjectUser) "
-                "WHERE u.name=e.targetUser "
-                "AND r.name=e.remoteHost "
-                "AND t.name=e.targetServer "
-                "AND u.remoteHost = r.name "
-                "AND s.SubjectUserRealName=e.SubjectUserName " # This equation is important in order to add EventRecordID correctly.
+                "MATCH (e:Event),(u:TargetUser),(s:SubjectUser) "
+                "WHERE s.name=e.SubjectUserName "
+                "AND u.name=e.targetUser "
+                "AND u.remoteHost=e.remoteHost "
+                "AND u.targetServer=e.targetServer "
+                "AND s.remoteHost=u.remoteHost "
+                "AND s.targetServer=u.targetServer "
+                "AND s.remoteHost=e.remoteHost "
+                "AND s.targetServer=e.targetServer "
                 "AND EXISTS(e.SubjectUserName) AND e.SubjectUserName IS NOT NULL "
-                "AND ((EXISTS(e.TargetUserName) AND e.TargetUserName IS NOT NULL) OR (EXISTS(e.TargetName) AND e.TargetName IS NOT NULL))"
+                "AND ((EXISTS(e.TargetUserName) AND e.TargetUserName IS NOT NULL) OR (EXISTS(e.TargetName) AND e.TargetName IS NOT NULL)) "
                 "SET s.EventRecordIDs=[e.EventRecordID] " #Adding the first matched EventRecordID. On the FOREACH part is adding the rest.
                 "WITH collect(e.SubjectUserName) as subjectUsernames, e "
                 "UNWIND subjectUsernames AS subjectUsername "
-                "FOREACH(p IN subjectUsername | MERGE (b:SubjectUser {name:p}) "
-                #"SET b.name=b.name+'(S)' "
+                "FOREACH(p IN subjectUsername | MERGE (b:SubjectUser {name:p,remoteHost:e.remoteHost,targetServer:e.targetServer}) "
+                "SET b.IsSubjectUser='true' "
                 "SET (CASE WHEN NOT e.EventRecordID IN b.EventRecordIDs THEN b END).EventRecordIDs=b.EventRecordIDs+e.EventRecordID "
                 "SET (CASE WHEN NOT e.targetUser IN b.TargetUsernames THEN b END).TargetUsernames=b.TargetUsernames+e.targetUser "
                 "SET (CASE WHEN NOT e.TargetUserSid IN b.bindTargetUserSids THEN b END).bindTargetUserSids=b.bindTargetUserSids+e.TargetUserSid "
                 "SET b.SubjectUserRealName=e.SubjectUserName)"
             )
-            
-            # Change the name of SubjectUsers node-> Add (S).
-            UpdateSubjectUsers2 = session.run(
-
-                "MATCH(s:SubjectUser) "
-                "SET s.name=s.name+'(S)'"
-            )
             total_time += time.time() - start
-            print("[6] Neo4j UpdateSubjectUsers query: %f " %(total_time))
-        
-
+            print("[3] Neo4j updateSubjectUserNode query: %f " %(total_time))
+############################### Target Users ########################################## 
         with neo4jDriver.session() as session:               
             total_time = 0
             start = time.time()
-            ### Update 'TargetUsers(T)' that have SubjectUsers.
             updateTargetUserNode = session.run(
-                "MATCH (u:TargetUser),(e:Event),(r:RemoteHosts),(t:TargetHost) "
-                "WHERE u.name=e.targetUser "
-                "AND r.name=e.remoteHost "
-                "AND t.name=e.targetServer "
-                "AND u.remoteHost = r.name "
-                "AND EXISTS(e.SubjectUserName) "
-                "AND (EXISTS(e.TargetUserName) OR EXISTS(e.TargetName)) "
-                "SET u.EventRecordIDs=[e.EventRecordID] "
-                "WITH collect(e.targetUser) as targetUsernames,e "
-                "UNWIND targetUsernames AS targetUsername "
-                "FOREACH(p IN targetUsername | MERGE (b:TargetUser {name:p}) "
-                #"SET b.name=b.name+'(T)' "
-                "SET b.TargetRealName=e.targetUser "
-                "SET (CASE WHEN NOT e.EventRecordID IN b.EventRecordIDs THEN b END).EventRecordIDs=b.EventRecordIDs+e.EventRecordID "
-                "SET (CASE WHEN NOT e.SubjectUserName IN b.SubjectUsernames THEN b END).SubjectUsernames=b.SubjectUsernames+e.SubjectUserName "
-                "SET b.IsSubjectUser = 'false' "
-                "SET b.hasTargetUsernameTag='true' "
-                "SET b.hasSubjectUsernameTag='true' "
-                "SET (CASE WHEN NOT e.SubjectUserSid IN b.bindSubjectUserSids THEN b END).bindSubjectUserSids=b.bindSubjectUserSids+e.SubjectUserSid)")
-            
-            # Change the name of SubjectUsers node-> Add (S).
-            UpdateSubjectUsers2 = session.run(
-
-                "MATCH(t:TargetUser) "
-                "WHERE t.hasSubjectUsernameTag='true' "
-                "SET t.name=t.name+'(T)'"
+                
+                "MATCH (s:SubjectUser),(t:TargetUser) "
+                "WHERE t.hasSubjectUser='true' "
+                "WITH s.EventRecordIDs as subjectUserEventRecordIDs,t.EventRecordIDs as targetUserEventRecordIDs,t,s "
+                "UNWIND subjectUserEventRecordIDs AS subjectUserEventRecordID "
+                "FOREACH(p IN subjectUserEventRecordID | "
+                "SET (CASE WHEN subjectUserEventRecordID IN targetUserEventRecordIDs THEN t END).SubjectUsernames=s.name)"
             )
             total_time += time.time() - start
-            print("[7] Neo4j updateTargetUserNode query: %f " %(total_time))
+            print("[4] Neo4j updateTargetUserNode query %f: " %(total_time))
 
-        with neo4jDriver.session() as session:   
-            total_time = 0
-            start = time.time()
-            ### Update 'TargetUser' node BUT for users that DONT have SubjectUsers
-            updateTargetUserNode3=session.run(
 
-                "MATCH (u:TargetUser),(e:Event) "
-                "WHERE u.TargetRealName=e.targetUser "
-                "AND u.remoteHost=e.remoteHost "
-                "AND u.targetServer=e.targetServer "
-                "AND u.hasSubjectUsernameTag='false' "
-                "WITH collect(u.TargetRealName) as targetUserNames,e "
-                "UNWIND targetUserNames as targetUserName "
-                "FOREACH (p in targetUserName | MERGE (c:TargetUser {name:p}) "
-                "SET (CASE WHEN NOT e.EventRecordID IN c.EventRecordIDs THEN c END).EventRecordIDs=c.EventRecordIDs+e.EventRecordID)"
-            
-            )
-            total_time += time.time() - start
-            print("[8] Neo4j updateTargetUserNode2 query %f: " %(total_time))
-
-        with neo4jDriver.session() as session:
-                total_time = 0
-                start = time.time()
-                deleteDublicatesTargetUsers=session.run(
-
-                    "MATCH (n:TargetUser) "
-                    "WITH n.EventRecordIDs as id, collect(n) as nodes "
-                    "WHERE size(nodes) > 1 "
-                    "UNWIND nodes[1..] AS n "
-                    "DETACH DELETE n"
-            
-                )
-                total_time += time.time() - start
-                print("[9] Neo4j deleteDublicatesTargetUsers query: %f " %(total_time))
-        
-
+###################################################Relationships######################################################
   
         with neo4jDriver.session() as session:
             total_time = 0
@@ -864,20 +750,19 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
             SubjectUserTargetUserRelationship1 = session.run(
 
                 "MATCH (r:RemoteHosts),(t:TargetUser),(s:SubjectUser),(th:TargetHost),(e:Event) "
-                "WHERE t.IsSubjectUser='false' "
+                "WHERE t.hasSubjectUser='true' "
                 "AND e.remoteHost=r.name "
                 "AND s.remoteHost=r.name "
                 "AND t.remoteHost=s.remoteHost "
-                "AND s.SubjectUserRealName IN t.SubjectUsernames "
+                "AND s.name IN t.SubjectUsernames "
                 "AND t.targetServer=s.targetServer "
-                "AND (EXISTS(e.TargetUserName) OR EXISTS(e.TargetName)) "
-                "AND EXISTS(e.SubjectUserName) "
-                "AND e.EventRecordID IN t.EventRecordIDs "
+                "AND e.hasSubjectUser='true' "
+                "AND e.EventRecordID IN s.EventRecordIDs "
                 "MERGE (r)-[r1:RemoteHostTOSubjectUsername]-(s)-[r2:SubjectUsernameTOTargetuser]->(t)"
             
             )
             total_time += time.time() - start
-            print("[10] Neo4j SubjectUserTargetUserRelationship1 query: %f " %(total_time))
+            print("[5] Neo4j SubjectUserTargetUserRelationship1 query: %f " %(total_time))
         
         with neo4jDriver.session() as session:
             total_time = 0
@@ -885,18 +770,17 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
             SubjectUserTargetUserRelationship2 = session.run(
 
                 "MATCH (t:TargetUser),(e:Event),(th:TargetHost) "
-                "WHERE t.IsSubjectUser='false' "
+                "WHERE t.hasSubjectUser='true' "
                 "AND t.targetServer=e.targetServer "
                 "AND t.remoteHost=e.remoteHost "
                 "AND e.EventRecordID IN t.EventRecordIDs "
                 "AND e.targetServer=th.name "
-                "AND (EXISTS(e.TargetUserName) OR EXISTS(e.TargetName)) "
-                "AND EXISTS(e.SubjectUserName) "
+                "AND e.hasSubjectUser='true' "
                 "MERGE (t)-[r3:TargetUserTOEvent]-(e)-[r4:EventIDTOtargetHost]->(th)"
 
             )
             total_time += time.time() - start
-            print("[11] Neo4j SubjectUserTargetUserRelationship2 query: %f " %(total_time))
+            print("[6] Neo4j SubjectUserTargetUserRelationship2 query: %f " %(total_time))
 
         with neo4jDriver.session() as session:   
             total_time = 0
@@ -906,13 +790,15 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
             # Create relationships only for Users that NOT contains 'SubjectUserName'
             remoteHost2DomUserRelationship=session.run(
                 
-                "MATCH (r:RemoteHosts),(u:TargetUser) "
+                "MATCH (r:RemoteHosts),(u:TargetUser),(e:Event) "
                 "WHERE u.remoteHost = r.name "
-                "AND u.hasSubjectUsernameTag='false' "
+                "AND e.hasSubjectUser='false' "
+                "AND u.hasSubjectUser='false' "
+                "AND e.EventRecordID IN u.EventRecordIDs "
                 "MERGE (r)-[r5:Source2TargetUser]->(u)"
             )
             total_time += time.time() - start
-            print("[12] Neo4j remoteHost2DomUserRelationship query: %f " %(total_time))
+            print("[7] Neo4j remoteHost2DomUserRelationship query: %f " %(total_time))
 
         with neo4jDriver.session() as session:
             total_time = 0
@@ -920,18 +806,18 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
             targetUser2EventRelationship = session.run(
                 
                 "MATCH (u:TargetUser),(e:Event),(t:TargetHost) "
-                "WHERE e.targetUser = u.name "
+                "WHERE e.targetUser=u.name "
                 "AND t.name=e.targetServer "
                 "AND u.targetServer=t.name "
                 "AND e.EventRecordID IN u.EventRecordIDs "
-                "AND NOT EXISTS(u.hasSubjectUserNameTag) OR u.hasSubjectUsernameTag='false' "
+                "AND u.hasSubjectUser='false' "
                 "MERGE (u)-[r7:TargetUser2Event]-(e)-[r8:Event2TargetHost]->(t)"
             )
 
             total_time += time.time() - start
-            print("[13] Neo4j targetUser2EventRelationship query: %f " %(total_time))
+            print("[8] Neo4j targetUser2EventRelationship query: %f " %(total_time))
 
-
+############################################END###########################################################################
             
             
     except Exception as e:
