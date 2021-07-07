@@ -719,8 +719,25 @@ def neo4jXML(outXMLFile,neo4jUri,neo4jUser,neo4jPass):
                 "SET (CASE WHEN NOT e.TargetUserSid IN b.bindTargetUserSids THEN b END).bindTargetUserSids=b.bindTargetUserSids+e.TargetUserSid "
                 "SET b.SubjectUserRealName=e.SubjectUserName)"
             )
+
+            deleteDublicateSubjectUsers= session.run(
+                
+                "MATCH (s:SubjectUser) "
+                "WITH collect(s) as nodes,s.EventRecordIDs as evIDs,s.remoteHost as remoteHost,s.targetServer as targetServer,s.TargetUsernames as targetUserNames "
+                "WHERE s.EventRecordIDs=evIDs "
+                "AND s.remoteHost=remoteHost "
+                "AND s.targetServer=targetServer "
+                "AND s.TargetUsernames=targetUserNames "
+                "AND size(nodes)>1 "
+                "UNWIND nodes[1..] as node "
+                "DETACH DELETE node"
+
+            )    
             total_time += time.time() - start
             print("[3] Neo4j updateSubjectUserNode query: %f " %(total_time))
+
+        
+
 ############################### Target Users ########################################## 
         with neo4jDriver.session() as session:               
             total_time = 0
